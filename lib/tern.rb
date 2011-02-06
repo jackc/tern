@@ -2,7 +2,7 @@ require 'sequel'
 Sequel.extension :migration
 require 'yaml'
 
-class DbSchemer
+class Tern
   def initialize(db, alterations_table, alterations_column, definitions_table)
     @db = db
     @alterations_table = alterations_table.to_sym

@@ -2,12 +2,12 @@
 $:.push File.expand_path("../lib", __FILE__)
 
 Gem::Specification.new do |s|
-  s.name        = "db_schemer"
-  s.version     = '0.3.0'
+  s.name        = "tern"
+  s.version     = '0.4.0'
   s.platform    = Gem::Platform::RUBY
   s.authors     = ["Jack Christensen"]
   s.email       = ["jack@jackchristensen.com"]
-  s.homepage    = "https://github.com/JackC/db_schemer"
+  s.homepage    = "https://github.com/JackC/tern"
   s.summary     = %q{Database schema manager}
   s.description = %q{Manages schemas with views, functions, triggers along with traditional migrations}
 

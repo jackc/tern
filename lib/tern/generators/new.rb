@@ -1,11 +1,11 @@
-class DbSchemerCommand < Thor
+class TernCommand < Thor
   include Thor::Actions
 
   source_root(File.join(File.dirname(__FILE__)))
 
   attr_accessor :app_name
 
-  desc "new PATH", "Create a new DbSchemer project"
+  desc "new PATH", "Create a new Tern project"
   def new(path)
     self.app_name = File.basename path
     self.destination_root = path
@@ -21,8 +21,8 @@ class DbSchemerCommand < Thor
 
     config = YAML.load(File.read('config.yml'))
     db = Sequel.connect config['environments'][options["environment"]]
-    db_schemer = DbSchemer.new(db, config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])
+    tern = Tern.new(db, config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])
 
-    db_schemer.migrate(:version => options["alteration_version"], :sequences => options["definition_sequences"])
+    tern.migrate(:version => options["alteration_version"], :sequences => options["definition_sequences"])
   end
 end
