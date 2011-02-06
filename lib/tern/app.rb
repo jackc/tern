@@ -1,7 +1,10 @@
-class TernCommand < Thor
+require 'thor'
+require 'thor/group'
+
+class App < Thor
   include Thor::Actions
 
-  source_root(File.join(File.dirname(__FILE__)))
+  source_root(File.join(File.dirname(__FILE__), "generators"))
 
   attr_accessor :app_name
 
@@ -12,7 +15,7 @@ class TernCommand < Thor
     directory "new", "."
   end
 
-  desc "migrate", "Drops definitions, run alterations, then recreate definitions"
+  desc "migrate", "Drop definitions, run alterations, then recreate definitions"
   method_option :environment, :type => :string, :desc => "Database environment to load", :default => "development", :aliases => "-e"
   method_option :alteration_version, :type => :numeric, :desc => "Target alteration version", :aliases => "-a"
   method_option :definition_sequences, :type => :array, :desc => "Definition sequences to drop and create", :default => ["default"], :aliases => "-d"

@@ -1,8 +1,8 @@
 alterations:
-  table: dbs_alterations
+  table: tern_alterations
   column: version
 definitions:
-  table: dbs_definitions
+  table: tern_definitions
 environments:
   development:
     adapter: postgres

@@ -1,9 +1,6 @@
 #!/usr/bin/env ruby
 
 require 'tern'
-require 'thor'
-require 'thor/group'
-require 'tern/generators/new'
+require 'tern/app'
 
-
-TernCommand.start
+App.start
