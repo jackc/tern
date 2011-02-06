@@ -50,7 +50,6 @@ class DbSchemer
     def load_target_definitions
       File.readlines('definitions/sequence').map do |l|
         l.sub(/#.*$/, '')
-      end
       end.map do |l|
         l.strip
       end.reject do |l|
