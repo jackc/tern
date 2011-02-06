@@ -1,2 +1,0 @@
-require 'db_schemer'
-require 'db_schemer/tasks'

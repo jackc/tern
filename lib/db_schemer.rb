@@ -1,3 +1,5 @@
+require 'sequel'
+Sequel.extension :migration
 require 'yaml'
 
 class DbSchemer
