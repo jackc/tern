@@ -48,9 +48,12 @@ class Tern
 
     def create_target_definitions(sequences)
       sequences.each do |s|
-        @target_definitions[s].each do |definition|
-          @db.run(definition[:create_sql])
-          @db[@definitions_table].insert :sequence => s, :create_sql => definition[:create_sql], :drop_sql => definition[:drop_sql]
+        sequence = @target_definitions[s]
+        if sequence
+          sequence.each do |definition|
+            @db.run(definition[:create_sql])
+            @db[@definitions_table].insert :sequence => s, :create_sql => definition[:create_sql], :drop_sql => definition[:drop_sql]
+          end
         end
       end
     end
