@@ -48,7 +48,14 @@ class DbSchemer
 
   private
     def load_target_definitions
-      File.readlines('definitions/sequence').map { |l| l.strip }.reject { |l| l.empty? }.map do |l|
+      File.readlines('definitions/sequence').map do |l|
+        l.sub(/#.*$/, '')
+      end
+      end.map do |l|
+        l.strip
+      end.reject do |l|
+        l.empty?
+      end.map do |l|
         create_sql, drop_sql = File.read('definitions/' + l).split('---- CREATE above / DROP below ----')
         {:create_sql => create_sql, :drop_sql => drop_sql}
       end

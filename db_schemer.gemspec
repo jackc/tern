@@ -11,7 +11,8 @@ Gem::Specification.new do |s|
   s.summary     = %q{Database schema manager}
   s.description = %q{Manages schemas with views, functions, triggers along with traditional migrations}
 
-  s.add_dependency "sequel"
+  s.add_dependency "sequel", ">= 3.19.0"
+  s.add_dependency "thor", ">= 0.14.6"
 
   s.files         = `git ls-files`.split("\n")
   s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")

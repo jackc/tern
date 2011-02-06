@@ -1,5 +1,9 @@
 #!/usr/bin/env ruby
 
 require 'db_schemer'
+require 'thor'
+require 'thor/group'
+require 'db_schemer/generators/new'
 
-puts 'testing'
+
+DbSchemerCommand.start

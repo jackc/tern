@@ -1,0 +1,15 @@
+alterations:
+  table: dbs_alterations
+  column: version
+definitions:
+  table: dbs_definitions
+environments:
+  development:
+    adapter: postgres
+    database: <%= app_name %>_development
+  test:
+    adapter: postgres
+    database: <%= app_name %>_test
+  production:
+    adapter: postgres
+    database: <%= app_name %>_production
