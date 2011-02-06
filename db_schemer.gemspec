@@ -3,7 +3,7 @@ $:.push File.expand_path("../lib", __FILE__)
 
 Gem::Specification.new do |s|
   s.name        = "db_schemer"
-  s.version     = '0.2.0'
+  s.version     = '0.3.0'
   s.platform    = Gem::Platform::RUBY
   s.authors     = ["Jack Christensen"]
   s.email       = ["jack@jackchristensen.com"]
