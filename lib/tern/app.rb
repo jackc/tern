@@ -22,6 +22,10 @@ class App < Thor
   def migrate
     require 'yaml'
 
+    unless File.exist?('config.yml')
+      puts 'This directory does not appear to be a Tern project. config.yml not found.'
+      return
+    end
     config = YAML.load(File.read('config.yml'))
     db = Sequel.connect config['environments'][options["environment"]]
     tern = Tern.new(db, config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])

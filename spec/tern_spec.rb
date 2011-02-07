@@ -51,6 +51,10 @@ describe "tern" do
       `dropdb tern_test_development`
     end
 
+    it "prints an error message if config.yml is not found" do
+      tern_migrate("spec/tmp").should match(/This directory does not appear to be a Tern project. config.yml not found./)
+    end
+
     it "works without any alterations" do
       tern_migrate("spec/projects/no_alterations").should be_empty
     end
