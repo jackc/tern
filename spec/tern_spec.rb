@@ -18,6 +18,12 @@ RSpec.configure do |config|
     end
   end
 
+  def tern_generate(path, args="")
+    Dir.chdir(path) do
+      tern "generate #{args}"
+    end
+  end
+
   def tmpdir
     $tmpdir
   end
@@ -36,6 +42,33 @@ describe "tern" do
         File.exist?("tern_spec/alterations").should be_true
         File.exist?("tern_spec/definitions").should be_true
         File.exist?("tern_spec/config.yml").should be_true
+      end
+    end
+  end
+
+  describe "generate" do
+    before(:each) do |example|
+      @project_path = File.expand_path(File.join(tmpdir, example.object_id.to_s))
+      tern "new #{@project_path}"
+    end
+
+    it "prints an error message if config.yml is not found" do
+      tern_generate("spec/tmp", "alteration create_people").should match(/This directory does not appear to be a Tern project. config.yml not found./)
+    end
+
+    describe "alteration" do
+      it "creates alteration file with next available number prefixing name" do
+        tern_generate(@project_path, "alteration create_widgets")
+        File.exist?(File.join(@project_path, "alterations", "001_create_widgets.rb")).should be_true
+        tern_generate(@project_path, "alteration create_sprockets")
+        File.exist?(File.join(@project_path, "alterations", "002_create_sprockets.rb")).should be_true
+      end
+    end
+    
+    describe "definition" do
+      it "creates definition file" do
+        tern_generate(@project_path, "definition create_a_view")
+        File.exist?(File.join(@project_path, "definitions", "create_a_view.sql")).should be_true
       end
     end
   end

@@ -15,6 +15,7 @@ class App < Thor
     directory "new", "."
   end
 
+  map "m" => "migrate"
   desc "migrate", "Drop definitions, run alterations, then recreate definitions"
   method_option :environment, :type => :string, :desc => "Database environment to load", :default => "development", :aliases => "-e"
   method_option :alteration_version, :type => :numeric, :desc => "Target alteration version", :aliases => "-a"
@@ -23,7 +24,7 @@ class App < Thor
     require 'yaml'
 
     unless File.exist?('config.yml')
-      puts 'This directory does not appear to be a Tern project. config.yml not found.'
+      say 'This directory does not appear to be a Tern project. config.yml not found.'
       return
     end
     config = YAML.load(File.read('config.yml'))
@@ -31,5 +32,30 @@ class App < Thor
     tern = Tern.new(db, config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])
 
     tern.migrate(:version => options["alteration_version"], :sequences => options["definition_sequences"])
+  end
+
+  map "g" => "generate"
+  desc "generate TYPE NAME", "Generate files"
+  def generate(type, name)
+    unless File.exist?('config.yml')
+      say 'This directory does not appear to be a Tern project. config.yml not found.', :red
+      return
+    end
+
+    case type
+    when 'a', 'alteration'
+      current_version = Dir.entries('alterations').map do |f|
+        f =~ /^(\d+)_.*.rb$/ ? $1.to_i : 0
+      end.max
+      zero_padded_next_version = (current_version+1).to_s.rjust(3, "0")
+      file_name = "#{zero_padded_next_version}_#{name}.rb"
+      copy_file "alteration.rb", "alterations/#{file_name}"
+    when 'd', 'definition'
+      file_name = "#{name}.sql"
+      copy_file "definition.sql", "definitions/#{file_name}"
+      say "Remember to add #{file_name} in your sequence.yml file."
+    else
+      say "#{type} is not a valid TYPE", :red
+    end
   end
 end
