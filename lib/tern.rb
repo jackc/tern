@@ -76,10 +76,30 @@ class Definition < Change
   end
 end
 
+class Alteration < Change
+  class << self
+    attr_accessor :table_name
+    attr_accessor :version_column
+
+    def table
+      DB[table_name]
+    end
+
+    def ensure_table_exists
+      vc = version_column # because create_table? block is run with different binding and can't access version_column
+      DB.create_table? table_name do
+        column vc, :integer, :null => false
+      end
+      table.insert version_column => 0
+    end
+  end
+end
+
 class Tern
   def initialize(alterations_table, alterations_column, definitions_table)
-    @alterations_table = alterations_table.to_sym
-    @alterations_column = alterations_column.to_sym
+    Alteration.table_name = alterations_table.to_sym
+    Alteration.version_column = alterations_column.to_sym
+    Alteration.ensure_table_exists
 
     Definition.table_name = definitions_table.to_sym
     Definition.ensure_table_exists

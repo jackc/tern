@@ -110,6 +110,11 @@ describe "tern" do
       @dev_db.tables.should include(:tern_definitions)
     end
 
+    it "creates alterations table on first run" do
+      tern_migrate "spec/projects/new"
+      @dev_db.tables.should include(:tern_alterations)
+    end
+
     it "applies alterations" do
       tern_migrate "spec/projects/alterations"
       @dev_db.tables.should include(:people)
