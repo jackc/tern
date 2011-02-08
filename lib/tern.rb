@@ -2,7 +2,16 @@ require 'sequel'
 Sequel.extension :migration
 require 'yaml'
 
-class Definition
+class Change
+  SPLIT_MARKER = '---- CREATE above / DROP below ----'
+
+  def self.parse(string)
+    create_sql, drop_sql = string.split('---- CREATE above / DROP below ----')
+    [create_sql, drop_sql]
+  end
+end
+
+class Definition < Change
   class << self
     attr_accessor :table_name
 
@@ -23,6 +32,20 @@ class Definition
       table.order(:id).all.map do |row|
         new row[:id], row[:sequence], row[:create_sql], row[:drop_sql]
       end.group_by { |d| d.sequence }
+    end
+
+    def load_targets(sequence_yml_path)
+      definition_sequences = YAML.load(File.read(sequence_yml_path))
+      sequence_dir = File.dirname(sequence_yml_path)
+
+      definition_sequences.keys.each do |sequence|
+        definition_sequences[sequence] = definition_sequences[sequence].map do |f|
+          create_sql, drop_sql = parse File.read(File.join(sequence_dir, f))
+          Definition.new nil, sequence, create_sql, drop_sql
+        end
+      end
+
+      definition_sequences
     end
   end
 
@@ -61,7 +84,7 @@ class Tern
     Definition.table_name = definitions_table.to_sym
     Definition.ensure_table_exists
     @existing_definitions = Definition.load_existing
-    @target_definitions = load_target_definitions
+    @target_definitions = Definition.load_targets 'definitions/sequence.yml'
   end
 
   def migrate(options={})
@@ -100,18 +123,5 @@ class Tern
           end
         end
       end
-    end
-
-    def load_target_definitions
-      definition_sequences = YAML.load(File.read('definitions/sequence.yml'))
-      
-      definition_sequences.keys.each do |sequence|
-        definition_sequences[sequence] = definition_sequences[sequence].map do |f|
-          create_sql, drop_sql = File.read('definitions/' + f).split('---- CREATE above / DROP below ----')
-          Definition.new nil, sequence, create_sql, drop_sql
-        end
-      end
-
-      definition_sequences
     end
 end

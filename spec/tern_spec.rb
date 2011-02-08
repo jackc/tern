@@ -1,6 +1,7 @@
 require 'rspec'
 require 'fileutils'
 require 'sequel'
+require 'tern'
 
 $tmpdir = 'spec/tmp/' + Time.now.strftime("%Y-%m-%d-%H-%M-%S")
 FileUtils.mkdir_p $tmpdir
@@ -26,6 +27,18 @@ RSpec.configure do |config|
 
   def tmpdir
     $tmpdir
+  end
+end
+
+describe "Change" do
+  describe "parse" do
+    it "splits on SPLIT_MARKER" do
+      ::Change.parse("create #{::Change::SPLIT_MARKER} drop").should == ["create ", " drop"]
+    end
+
+    it "returns entire string as create if no SPLIT_MARKER not found" do
+      ::Change.parse("create").should == ["create", nil]
+    end
   end
 end
 
