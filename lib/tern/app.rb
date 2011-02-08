@@ -28,8 +28,8 @@ class App < Thor
       return
     end
     config = YAML.load(File.read('config.yml'))
-    db = Sequel.connect config['environments'][options["environment"]]
-    tern = Tern.new(db, config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])
+    ::Kernel.const_set("DB", Sequel.connect(config['environments'][options["environment"]])) # using const_set to avoid dynamic constant assignment error
+    tern = Tern.new(config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])
 
     tern.migrate(:version => options["alteration_version"], :sequences => options["definition_sequences"])
   end

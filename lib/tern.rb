@@ -2,21 +2,71 @@ require 'sequel'
 Sequel.extension :migration
 require 'yaml'
 
+class Definition
+  class << self
+    attr_accessor :table_name
+
+    def table
+      DB[table_name]
+    end
+
+    def ensure_table_exists
+      DB.create_table? table_name do
+        primary_key :id
+        column :sequence, :text, :null => false
+        column :create_sql, :text, :null => false
+        column :drop_sql, :text, :null => false
+      end
+    end
+
+    def load_existing
+      table.order(:id).all.map do |row|
+        new row[:id], row[:sequence], row[:create_sql], row[:drop_sql]
+      end.group_by { |d| d.sequence }
+    end
+  end
+
+  attr_reader :id
+  attr_reader :sequence
+  attr_reader :create_sql
+  attr_reader :drop_sql
+
+  def initialize(id, sequence, create_sql, drop_sql)
+    @id = id
+    @sequence = sequence
+    @create_sql = create_sql
+    @drop_sql = drop_sql
+  end
+
+  def create
+    DB.run create_sql
+    table.insert :sequence => sequence, :create_sql => create_sql, :drop_sql => drop_sql
+  end
+
+  def drop
+    DB.run drop_sql
+    table.filter(:id => id).delete
+  end
+
+  def table
+    self.class.table
+  end
+end
+
 class Tern
-  def initialize(db, alterations_table, alterations_column, definitions_table)
-    @db = db
+  def initialize(alterations_table, alterations_column, definitions_table)
     @alterations_table = alterations_table.to_sym
     @alterations_column = alterations_column.to_sym
-    @definitions_table = definitions_table.to_sym
 
-    ensure_definitions_table_exists
-    @existing_definitions = load_existing_definitions
+    Definition.table_name = definitions_table.to_sym
+    Definition.ensure_table_exists
+    @existing_definitions = Definition.load_existing
     @target_definitions = load_target_definitions
   end
 
   def migrate(options={})
     sequences = options[:sequences] || ['default']
-    @db.transaction do
+    DB.transaction do
       drop_existing_definitions(sequences)
       run_alterations(options[:version])
       create_target_definitions(sequences)
@@ -26,7 +76,7 @@ class Tern
   private
     def run_alterations(version=nil)
       unless Dir.glob("alterations/[0-9]*.rb").empty?
-        Sequel::Migrator.run(@db, 'alterations', :table => @alterations_table, :column => @alterations_column, :target => version)
+        Sequel::Migrator.run(DB, 'alterations', :table => @alterations_table, :column => @alterations_column, :target => version)
       end
     end
 
@@ -35,15 +85,10 @@ class Tern
         sequence = @existing_definitions[s]
         if sequence
           sequence.reverse.each do |definition|
-            @db.run(definition[:drop_sql])
-            @db[@definitions_table].filter(:id => definition[:id]).delete
+            definition.drop
           end
         end
       end
-    end
-
-    def load_existing_definitions
-      @db[@definitions_table].order(:id).all.group_by { |d| d[:sequence] }
     end
 
     def create_target_definitions(sequences)
@@ -51,8 +96,7 @@ class Tern
         sequence = @target_definitions[s]
         if sequence
           sequence.each do |definition|
-            @db.run(definition[:create_sql])
-            @db[@definitions_table].insert :sequence => s, :create_sql => definition[:create_sql], :drop_sql => definition[:drop_sql]
+            definition.create
           end
         end
       end
@@ -64,19 +108,10 @@ class Tern
       definition_sequences.keys.each do |sequence|
         definition_sequences[sequence] = definition_sequences[sequence].map do |f|
           create_sql, drop_sql = File.read('definitions/' + f).split('---- CREATE above / DROP below ----')
-          {:create_sql => create_sql, :drop_sql => drop_sql}
+          Definition.new nil, sequence, create_sql, drop_sql
         end
       end
 
       definition_sequences
-    end
-
-    def ensure_definitions_table_exists
-      @db.create_table? @definitions_table do
-        primary_key :id
-        column :sequence, :text, :null => false
-        column :create_sql, :text, :null => false
-        column :drop_sql, :text, :null => false
-      end
     end
 end
