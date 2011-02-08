@@ -29,9 +29,13 @@ class App < Thor
     end
     config = YAML.load(File.read('config.yml'))
     ::Kernel.const_set("DB", Sequel.connect(config['environments'][options["environment"]])) # using const_set to avoid dynamic constant assignment error
-    tern = Tern.new(config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])
 
-    tern.migrate(:version => options["alteration_version"], :sequences => options["definition_sequences"])
+    begin
+      tern = Tern.new(config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])
+      tern.migrate(:version => options["alteration_version"], :sequences => options["definition_sequences"])
+    rescue Alteration::IrreversibleAlteration, Alteration::MissingAlteration, Alteration::DuplicateAlteration
+      say $!, :red
+    end
   end
 
   map "g" => "generate"
@@ -45,14 +49,14 @@ class App < Thor
     case type
     when 'a', 'alteration'
       current_version = Dir.entries('alterations').map do |f|
-        f =~ /^(\d+)_.*.rb$/ ? $1.to_i : 0
+        f =~ /^(\d+)_.*.sql$/ ? $1.to_i : 0
       end.max
       zero_padded_next_version = (current_version+1).to_s.rjust(3, "0")
-      file_name = "#{zero_padded_next_version}_#{name}.rb"
-      copy_file "alteration.rb", "alterations/#{file_name}"
+      file_name = "#{zero_padded_next_version}_#{name}.sql"
+      copy_file "change.sql", "alterations/#{file_name}"
     when 'd', 'definition'
       file_name = "#{name}.sql"
-      copy_file "definition.sql", "definitions/#{file_name}"
+      copy_file "change.sql", "definitions/#{file_name}"
       say "Remember to add #{file_name} in your sequence.yml file."
     else
       say "#{type} is not a valid TYPE", :red

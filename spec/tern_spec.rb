@@ -72,9 +72,9 @@ describe "tern" do
     describe "alteration" do
       it "creates alteration file with next available number prefixing name" do
         tern_generate(@project_path, "alteration create_widgets")
-        File.exist?(File.join(@project_path, "alterations", "001_create_widgets.rb")).should be_true
+        File.exist?(File.join(@project_path, "alterations", "001_create_widgets.sql")).should be_true
         tern_generate(@project_path, "alteration create_sprockets")
-        File.exist?(File.join(@project_path, "alterations", "002_create_sprockets.rb")).should be_true
+        File.exist?(File.join(@project_path, "alterations", "002_create_sprockets.sql")).should be_true
       end
     end
     
@@ -117,13 +117,40 @@ describe "tern" do
 
     it "applies alterations" do
       tern_migrate "spec/projects/alterations"
-      @dev_db.tables.should include(:people)
+      @dev_db.tables.should include(:people, :animals, :plants)
     end
 
-    it "reverts alterations to given alteration version" do
+    it "applies alterations to version n" do
+      tern_migrate "spec/projects/alterations", "-a 1"
+      @dev_db.tables.should include(:people)
+      tern_migrate "spec/projects/alterations", "-a 3"
+      @dev_db.tables.should include(:people, :animals, :plants)
+    end
+
+    it "reverts all alterations" do
       tern_migrate "spec/projects/alterations"
       tern_migrate "spec/projects/alterations", "-a 0"
-      @dev_db.tables.should_not include(:people)
+      @dev_db.tables.should_not include(:people, :animals, :plants)
+    end
+
+    it "reverts alterations to version n" do
+      tern_migrate "spec/projects/alterations"
+      tern_migrate "spec/projects/alterations", "-a 1"
+      @dev_db.tables.should include(:people)
+      @dev_db.tables.should_not include(:animals, :plants)
+    end
+
+    it "prints an error message when attempting to revert an irreversible alteration" do
+      tern_migrate "spec/projects/irreversible_alterations"
+      tern_migrate("spec/projects/irreversible_alterations", "-a 0").should match /Alteration 002 is irreversible/
+    end
+
+    it "prints an error message when missing alteration" do
+      tern_migrate("spec/projects/missing_alteration").should match /Alteration 002 is missing/
+    end
+
+    it "prints an error message when alteration version is duplicated" do
+      tern_migrate("spec/projects/duplicated_alteration").should match /Alteration 002 is duplicated/
     end
 
     it "uses environment parameter" do

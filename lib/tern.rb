@@ -1,5 +1,4 @@
 require 'sequel'
-Sequel.extension :migration
 require 'yaml'
 
 class Change
@@ -77,6 +76,15 @@ class Definition < Change
 end
 
 class Alteration < Change
+  class IrreversibleAlteration < StandardError
+  end
+
+  class MissingAlteration < StandardError
+  end
+
+  class DuplicateAlteration < StandardError
+  end
+
   class << self
     attr_accessor :table_name
     attr_accessor :version_column
@@ -92,6 +100,52 @@ class Alteration < Change
       end
       table.insert version_column => 0
     end
+
+    def version
+      table.get(version_column)
+    end
+
+    def version=(new_version)
+      table.update version_column => new_version
+    end
+
+    def load(alterations_path)
+      alterations = Dir.glob("#{alterations_path}/[0-9]*.sql").map do |path|
+        raise "This can't happen" unless File.basename(path) =~ /^(\d+)/
+        version = $1.to_i
+        create_sql, drop_sql = parse File.read(path)
+        new version, create_sql, drop_sql
+      end.sort_by(&:version)
+
+      alterations.each_with_index do |a, i|
+        expected = i+1
+        raise DuplicateAlteration, "Alteration #{a.version.to_s.rjust(3, "0")} is duplicated" if a.version < expected
+        raise MissingAlteration, "Alteration #{expected.to_s.rjust(3, "0")} is missing" if a.version > expected
+      end
+
+      alterations
+    end
+  end
+
+  attr_reader :version
+  attr_reader :create_sql
+  attr_reader :drop_sql
+
+  def initialize(version, create_sql, drop_sql)
+    @version = version
+    @create_sql = create_sql
+    @drop_sql = drop_sql
+  end
+
+  def create
+    DB.run create_sql
+    Alteration.version = version
+  end
+
+  def drop
+    raise IrreversibleAlteration, "Alteration #{version.to_s.rjust(3, "0")} is irreversible" unless drop_sql
+    DB.run drop_sql
+    Alteration.version = version - 1
   end
 end
 
@@ -100,6 +154,7 @@ class Tern
     Alteration.table_name = alterations_table.to_sym
     Alteration.version_column = alterations_column.to_sym
     Alteration.ensure_table_exists
+    @alterations = Alteration.load 'alterations'
 
     Definition.table_name = definitions_table.to_sym
     Definition.ensure_table_exists
@@ -118,8 +173,13 @@ class Tern
 
   private
     def run_alterations(version=nil)
-      unless Dir.glob("alterations/[0-9]*.rb").empty?
-        Sequel::Migrator.run(DB, 'alterations', :table => @alterations_table, :column => @alterations_column, :target => version)
+      return if @alterations.empty?
+      version ||= @alterations.size
+
+      if Alteration.version < version
+        @alterations[Alteration.version..version].each(&:create)
+      elsif
+        @alterations[version..(Alteration.version-1)].reverse.each(&:drop)
       end
     end
 
