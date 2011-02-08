@@ -8,7 +8,7 @@ Gem::Specification.new do |s|
   s.authors     = ["Jack Christensen"]
   s.email       = ["jack@jackchristensen.com"]
   s.homepage    = "https://github.com/JackC/tern"
-  s.summary     = %q{Database schema manager}
+  s.summary     = %q{The SQL Fan's Migrator}
   s.description = %q{Manages schemas with views, functions, triggers along with traditional migrations}
 
   s.add_dependency "sequel", ">= 3.19.0"
