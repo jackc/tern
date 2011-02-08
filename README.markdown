@@ -30,8 +30,24 @@ Creating a Tern Project
     tern new my_project
 
 Edit config.yml and set up your database environments. Database environment
-parameters are passed directly to Sequel.connect so it can use any options
-Sequel can.
+parameters are passed directly to Sequel.connect so it uses the same
+[options][3].
+
+    alterations:
+      table: tern_alterations
+      column: version
+    definitions:
+      table: tern_definitions
+    environments:
+      development:
+        adapter: postgres
+        database: my_project_development
+      test:
+        adapter: postgres
+        database: my_project_test
+      production:
+        adapter: postgres
+        database: my_project_production
 
 Migration Types
 ===============
@@ -44,7 +60,9 @@ popularized by Ruby on Rails. View creation is a definition, because it can be
 dropped without possibility of data loss.
 
 Both types of migrations have an extremely simple file format. They are simply
-SQL with a magic comment to divide the create SQL from the drop SQL.
+the create and drop SQL statements divided by a magic comment.
+
+    ---- CREATE above / DROP below ----
 
 Alterations
 -----------
@@ -168,3 +186,4 @@ Copyright (c) 2011 Jack Christensen, released under the MIT license
 
 [1]: http://sequel.rubyforge.org/
 [2]: http://www.postgresql.org/
+[3]: http://sequel.rubyforge.org/rdoc/files/doc/opening_databases_rdoc.html
