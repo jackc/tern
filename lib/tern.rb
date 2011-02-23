@@ -98,7 +98,7 @@ class Alteration < Change
       DB.create_table? table_name do
         column vc, :integer, :null => false
       end
-      table.insert version_column => 0
+      table.insert version_column => 0 if table.count == 0
     end
 
     def version

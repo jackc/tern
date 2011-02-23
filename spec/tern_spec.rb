@@ -115,6 +115,18 @@ describe "tern" do
       @dev_db.tables.should include(:tern_alterations)
     end
 
+    it "inserts version 0 into alterations table on first run" do
+      tern_migrate "spec/projects/new"
+      @dev_db[:tern_alterations].count.should == 1
+      @dev_db[:tern_alterations].get(:version).should == 0
+    end
+
+    it "does not insert version 0 into alterations table on subsequent runs" do
+      tern_migrate "spec/projects/new"
+      tern_migrate "spec/projects/new"
+      @dev_db[:tern_alterations].count.should == 1
+    end
+
     it "applies alterations" do
       tern_migrate "spec/projects/alterations"
       @dev_db.tables.should include(:people, :animals, :plants)
