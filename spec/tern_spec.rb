@@ -181,6 +181,16 @@ describe "tern" do
       tern_migrate "spec/projects/definitions"
       @dev_db.get{ultimate_answer{}}.should == 42
     end
+    
+    it "runs definitions through erb" do
+      tern_migrate "spec/projects/erb"
+      @dev_db.get{ultimate_answer{}}.should == 42
+    end
+    
+    it "runs definitions through erb - render_file" do
+      tern_migrate "spec/projects/erb"
+      @dev_db.get{rendered_function{}}.should == 7
+    end    
 
     it "drops definitions" do
       tern_migrate "spec/projects/definitions"

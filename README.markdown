@@ -178,7 +178,39 @@ Multiple sequences may be specified and they will be run in the order they are
 listed.
 
     tern migrate --definition-sequences=expensive default
+    
+ERB
+===
 
+Alterations and definitions are run through ERB. Subtemplates may be 
+included with the render_file method. Instance variables will be 
+available in the subtemplates. 
+
+definitions/render_file.sql
+
+    <% @num_from_outer_template = 7 %>
+    <%= render_file "definitions/rendered_function.sql" %>
+    
+definitions/rendered_function.sql
+
+    CREATE FUNCTION rendered_function() RETURNS integer AS $$
+      SELECT <%= @num_from_outer_template %>;
+    $$ LANGUAGE SQL;
+
+    ---- CREATE above / DROP below ----
+
+    DROP FUNCTION rendered_function();
+
+This will result in:
+
+    CREATE FUNCTION rendered_function() RETURNS integer AS $$
+      SELECT 7;
+    $$ LANGUAGE SQL;
+
+    ---- CREATE above / DROP below ----
+
+    DROP FUNCTION rendered_function();
+    
 License
 =======
 

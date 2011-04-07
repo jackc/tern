@@ -1,11 +1,23 @@
 require 'sequel'
 require 'yaml'
+require 'erb'
+
+class Parser
+  def render_text(text)
+    ERB.new(text).result(binding)
+  end
+  
+  def render_file(file_path)
+    string = File.read file_path
+    render_text(string)
+  end
+end
 
 class Change
   SPLIT_MARKER = '---- CREATE above / DROP below ----'
 
   def self.parse(string)
-    create_sql, drop_sql = string.split('---- CREATE above / DROP below ----')
+    create_sql, drop_sql = Parser.new.render_text(string).split(SPLIT_MARKER)
     [create_sql, drop_sql]
   end
 end
