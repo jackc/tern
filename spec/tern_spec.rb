@@ -233,5 +233,19 @@ describe "tern" do
         expect { @dev_db[:a].all }.to raise_error(Sequel::DatabaseError)
       end
     end
+    
+    context "alteration with database error" do
+      it "prints an error message with file name" do
+        tern_migrate("spec/projects/alteration_with_error").should match /Error in alterations\/003_create_plants.sql/
+      end
+    end
+    
+    context "definition with database error" do
+      it "prints an error message with file name" do
+        tern_migrate("spec/projects/definition_with_error").should match /Error in definitions\/ultimate_answer.sql/
+      end
+    end
+    
+    
   end
 end

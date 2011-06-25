@@ -1,0 +1,19 @@
+# Put the relative path to your definition files in the sequence they should run.
+#
+# Most definitions should go in the default list. These will be dropped and
+# recreated every migration.
+#
+# Definitions that should not automatically be dropped and created can be put in
+# different lists. This is useful for definitions that make take prohibitively
+# to drop and create every migration such as check constraints.
+#
+# Run alternative sequences by specifying sequences in order to migrate command.
+# Example: rake migrate sequences=expensive,default
+#
+# default:
+#   - ultimate_answer.sql
+# expensive:
+#   - super_slow_check_constraint.sql
+
+default:
+  - ultimate_answer.sql

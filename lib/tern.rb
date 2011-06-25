@@ -2,6 +2,9 @@ require 'sequel'
 require 'yaml'
 require 'erb'
 
+class TernError < StandardError
+end
+
 class Parser
   def render_text(text)
     ERB.new(text).result(binding)
@@ -14,12 +17,25 @@ class Parser
 end
 
 class Change
+  class DatabaseError < TernError
+  end
+
   SPLIT_MARKER = '---- CREATE above / DROP below ----'
 
   def self.parse(string)
     create_sql, drop_sql = Parser.new.render_text(string).split(SPLIT_MARKER)
     [create_sql, drop_sql]
   end
+  
+  def run(sql, context)
+    DB.run sql
+  rescue Sequel::DatabaseError
+    raise DatabaseError, "Error in #{context}\n#{$!.to_s}"
+  end
+  
+  attr_reader :create_sql
+  attr_reader :drop_sql
+  attr_reader :name
 end
 
 class Definition < Change
@@ -41,7 +57,7 @@ class Definition < Change
 
     def load_existing
       table.order(:id).all.map do |row|
-        new row[:id], row[:sequence], row[:create_sql], row[:drop_sql]
+        new "existing definition: #{row[:id]}", row[:id], row[:sequence], row[:create_sql], row[:drop_sql]
       end.group_by { |d| d.sequence }
     end
 
@@ -51,8 +67,9 @@ class Definition < Change
 
       definition_sequences.keys.each do |sequence|
         definition_sequences[sequence] = definition_sequences[sequence].map do |f|
-          create_sql, drop_sql = parse File.read(File.join(sequence_dir, f))
-          Definition.new nil, sequence, create_sql, drop_sql
+          path = File.join(sequence_dir, f)
+          create_sql, drop_sql = parse File.read(path)
+          Definition.new path, nil, sequence, create_sql, drop_sql
         end
       end
 
@@ -62,10 +79,9 @@ class Definition < Change
 
   attr_reader :id
   attr_reader :sequence
-  attr_reader :create_sql
-  attr_reader :drop_sql
-
-  def initialize(id, sequence, create_sql, drop_sql)
+  
+  def initialize(name, id, sequence, create_sql, drop_sql)
+    @name = name
     @id = id
     @sequence = sequence
     @create_sql = create_sql
@@ -73,12 +89,12 @@ class Definition < Change
   end
 
   def create
-    DB.run create_sql
+    run create_sql, name
     table.insert :sequence => sequence, :create_sql => create_sql, :drop_sql => drop_sql
   end
 
   def drop
-    DB.run drop_sql
+    run drop_sql, name
     table.filter(:id => id).delete
   end
 
@@ -88,13 +104,13 @@ class Definition < Change
 end
 
 class Alteration < Change
-  class IrreversibleAlteration < StandardError
+  class IrreversibleAlteration < TernError
   end
 
-  class MissingAlteration < StandardError
+  class MissingAlteration < TernError
   end
 
-  class DuplicateAlteration < StandardError
+  class DuplicateAlteration < TernError
   end
 
   class << self
@@ -126,7 +142,7 @@ class Alteration < Change
         raise "This can't happen" unless File.basename(path) =~ /^(\d+)/
         version = $1.to_i
         create_sql, drop_sql = parse File.read(path)
-        new version, create_sql, drop_sql
+        new path, version, create_sql, drop_sql
       end.sort_by(&:version)
 
       alterations.each_with_index do |a, i|
@@ -140,23 +156,22 @@ class Alteration < Change
   end
 
   attr_reader :version
-  attr_reader :create_sql
-  attr_reader :drop_sql
 
-  def initialize(version, create_sql, drop_sql)
+  def initialize(name, version, create_sql, drop_sql)
+    @name = name
     @version = version
     @create_sql = create_sql
     @drop_sql = drop_sql
   end
 
   def create
-    DB.run create_sql
+    run create_sql, name
     Alteration.version = version
   end
 
   def drop
     raise IrreversibleAlteration, "Alteration #{version.to_s.rjust(3, "0")} is irreversible" unless drop_sql
-    DB.run drop_sql
+    run drop_sql, name
     Alteration.version = version - 1
   end
 end

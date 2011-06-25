@@ -211,6 +211,14 @@ This will result in:
 
     DROP FUNCTION rendered_function();
     
+Version History
+===============
+
+* **0.7.1**
+  * Print friendly error message when database error occurs instead of stack trace.
+* **0.7.0**
+  * Added ERB processing to SQL files
+    
 License
 =======
 

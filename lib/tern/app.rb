@@ -33,7 +33,7 @@ class App < Thor
     begin
       tern = Tern.new(config['alterations']['table'], config['alterations']['column'], config['definitions']['table'])
       tern.migrate(:version => options["alteration_version"], :sequences => options["definition_sequences"])
-    rescue Alteration::IrreversibleAlteration, Alteration::MissingAlteration, Alteration::DuplicateAlteration
+    rescue TernError
       say $!, :red
     end
   end
