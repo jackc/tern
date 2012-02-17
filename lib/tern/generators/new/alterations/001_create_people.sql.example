@@ -1,16 +1,8 @@
-Sequel.migration do
-  up do
-    run <<-END_SQL
-      CREATE TABLE people(
-        id serial PRIMARY KEY,
-        name varchar NOT NULL
-      );
-    END_SQL
-  end
+CREATE TABLE people(
+  id serial PRIMARY KEY,
+  name varchar NOT NULL
+);
 
-  down do
-    run <<-END_SQL
-      DROP TABLE people;
-    END_SQL
-  end
-end
+---- CREATE above / DROP below ----
+
+DROP TABLE people;
