@@ -1,3 +1,21 @@
+Tern Has Been Retired
+=====================
+
+This project has been retired. While it did solve the problem of database
+objects like views and functions with dependencies on other database objects it
+created other problems.
+
+1. Dropping all definitions each run lost database level permissions.
+2. Dropping and recreating all definitions caused longer service interruptions
+   than only making necessary changes.
+3. Alterations could not use database objects defined by definitions as they
+   would not exist when the alteration was running.
+
+With these problems in mind, it appears that it is better to use Rails or Sequel
+style migrators and choose by hand what database objects must be created or
+dropped.
+
+
 Tern - The SQL Fan's Migrator
 ===============================
 
