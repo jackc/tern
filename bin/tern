@@ -1,6 +1,0 @@
-#!/usr/bin/env ruby
-
-require 'tern'
-require 'tern/app'
-
-App.start
