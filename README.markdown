@@ -2,11 +2,11 @@
 
 Tern is a standalone migration tool for PostgreSQL.
 
-# Installation
+## Installation
 
     go install github.com/JackC/tern
 
-# Creating a Tern Project
+## Creating a Tern Project
 
 Tern projects are composed of a config JSON file and a directory of
 migrations. See the sample directory for an example.By default tern will look
@@ -50,7 +50,7 @@ Migrations are read from files in the migration directory in lexicographic
 order. Typically, migration files will be prefix with 001, 002, 003, etc., but
 that is not strictly necessary, Each migration is run in a transaction.
 
-# Migrating
+## Migrating
 
 To migrate up to the last version using migrations and config file located in
 the same directory simply run tern:
@@ -65,20 +65,20 @@ To use a different config file:
 
     tern --config path/to/tern.json
 
-# Embedding Tern
+## Embedding Tern
 
 All the actual functionality of tern is in the github.com/JackC/tern/migrate
 library. If you need to embed migrations into your own application this
 library can help.
 
-# Prior Ruby Gem Version
+## Prior Ruby Gem Version
 
 The projects using the prior version of tern that was distributed as a Ruby
 Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 
-# Version History
+## Version History
 
 * **1.0.0**
   * Total rewrite in Go
@@ -87,6 +87,6 @@ is still available through RubyGems and the source code is on the ruby branch.
 * **0.7.0**
   * Added ERB processing to SQL files
 
-# License
+## License
 
 Copyright (c) 2011-2014 Jack Christensen, released under the MIT license
