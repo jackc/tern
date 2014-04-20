@@ -1,0 +1,5 @@
+{
+  "socket": "/var/run/postgresql/.s.PGSQL.5432",
+  "database": "tern_test",
+  "user": "jack"
+}
