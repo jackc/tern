@@ -92,46 +92,37 @@ func (m *Migrator) LoadMigrations(path string) error {
 		pieces := strings.SplitN(string(body), "---- create above / drop below ----", 2)
 		var upSQL, downSQL string
 		upSQL = strings.TrimSpace(pieces[0])
+		upSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" up"), upSQL)
+		if err != nil {
+			return err
+		}
 		if len(pieces) == 2 {
 			downSQL = strings.TrimSpace(pieces[1])
+			downSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" down"), downSQL)
+			if err != nil {
+				return err
+			}
 		}
-
-		var tmpl *template.Template
-		var buf bytes.Buffer
-		var name string
-
-		name = filepath.Base(p) + " up"
-		tmpl, err = mainTmpl.New(name).Parse(upSQL)
-		if err != nil {
-			return err
-		}
-
-		err = tmpl.ExecuteTemplate(&buf, name, m.Data)
-		if err != nil {
-			return err
-		}
-
-		upSQL = buf.String()
-
-		buf.Reset()
-
-		name = filepath.Base(p) + " down"
-		tmpl, err = template.New(name).Parse(downSQL)
-		if err != nil {
-			return err
-		}
-
-		err = tmpl.ExecuteTemplate(&buf, name, m.Data)
-		if err != nil {
-			return err
-		}
-
-		downSQL = buf.String()
 
 		m.AppendMigration(filepath.Base(p), upSQL, downSQL)
 	}
 
 	return nil
+}
+
+func (m *Migrator) evalMigration(tmpl *template.Template, sql string) (string, error) {
+	tmpl, err := tmpl.Parse(sql)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, m.Data)
+	if err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }
 
 func (m *Migrator) AppendMigration(name, upSQL, downSQL string) {
