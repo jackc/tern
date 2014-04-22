@@ -97,6 +97,9 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+* **Unreleased**
+  * Switch to ini for config files
+  * Add custom data merging
 * **1.0.0**
   * Total rewrite in Go
 * **0.7.1**
