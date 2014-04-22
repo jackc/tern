@@ -1,8 +1,0 @@
-{
-  "socket": "/private/tmp/.s.PGSQL.5432",
-  "database": "tern_test",
-  "user": "jack",
-  "data": {
-    "prefix": "foo"
-  }
-}
