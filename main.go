@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const VERSION = "1.0.0"
+const VERSION = "1.1.0pre"
 
 type Opts struct {
 	Destination    string `short:"d" long:"destination" description:"Destination migration version" default:"last"`
@@ -23,13 +23,14 @@ type Opts struct {
 }
 
 type Config struct {
-	Socket       string `json:socket`
-	Host         string `json:host`
-	Port         uint16 `json:port`
-	Database     string `json:database`
-	User         string `json:user`
-	Password     string `json:password`
-	VersionTable string `json:versionTable`
+	Socket       string                 `json:socket`
+	Host         string                 `json:host`
+	Port         uint16                 `json:port`
+	Database     string                 `json:database`
+	User         string                 `json:user`
+	Password     string                 `json:password`
+	VersionTable string                 `json:versionTable`
+	Data         map[string]interface{} `json:data`
 }
 
 func (c *Config) ConnectionParameters() pgx.ConnectionParameters {
@@ -101,6 +102,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
 	}
+	migrator.Data = config.Data
 
 	err = migrator.LoadMigrations(opts.MigrationsPath)
 	if err != nil {
@@ -112,15 +114,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	migrator.OnStart = func(migration *migrate.Migration, direction string) {
-		var sql string
-		if direction == "up" {
-			sql = migration.UpSQL
-		} else {
-			sql = migration.DownSQL
-		}
-
-		fmt.Printf("%s executing %s %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), migration.Name, direction, sql)
+	migrator.OnStart = func(sequence int32, name, direction, sql string) {
+		fmt.Printf("%s executing %s %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), name, direction, sql)
 	}
 
 	if opts.Destination == "last" {

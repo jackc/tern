@@ -252,6 +252,17 @@ func (s *MigrateSuite) TestMigrateToIrreversible(c *C) {
 	c.Assert(err, ErrorMatches, "Irreversible migration: 1 - Foo")
 }
 
+func (s *MigrateSuite) TestMigrateToTemplateData(c *C) {
+	m := s.createEmptyMigrator(c)
+	m.AppendMigration("Foo", "create table {{.tableName}}(id serial primary key);", "")
+	m.Data["tableName"] = "t1"
+
+	err := m.MigrateTo(1)
+	c.Assert(err, IsNil)
+
+	c.Assert(s.tableExists(c, "t1"), Equals, true)
+}
+
 func Example_OnStartMigrationProgressLogging() {
 	conn, err := pgx.Connect(*defaultConnectionParameters)
 	if err != nil {

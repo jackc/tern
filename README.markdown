@@ -10,17 +10,37 @@ Tern is a standalone migration tool for PostgreSQL.
 ## Creating a Tern Project
 
 Tern projects are composed of a config JSON file and a directory of
-migrations. See the sample directory for an example.By default tern will look
+migrations. See the sample directory for an example. By default tern will look
 in the current directory for the config file tern.json and the migrations.
 
-The config JSON file requires socket or host, database, and user. port,
-password, and versionTable are optional.
+The config JSON file requires socket or host, database, and user.
 
 ```json
 {
   "socket": "/var/run/postgresql/.s.PGSQL.5432",
   "database": "tern_test",
   "user": "jack"
+}
+```
+
+Valid config options:
+
+    socket: Unix domain socket path to server (socket or host is required)
+    host: FQDN or IP address of server (socket or host is required)
+    port: Port of server (defaults to 5432)
+    user: User to connect as (required)
+    versionTable: Table to store schema version (defaults to schema_version)
+    data: Custom data available to use in migrations (empty by default)
+
+The data config option can be useful for making data such as table prefix
+available in the migration.
+
+```json
+{
+  ...
+  "data": {
+    "prefix": "foo_"
+  }
 }
 ```
 
@@ -45,6 +65,14 @@ comment.
 
 ```sql
 drop table widgets;
+```
+
+To interpolate a custom data value from the config file use the standard Go [text/template](http://golang.org/pkg/text/template/) syntax.
+
+```sql
+create table {{.prefix}}config(
+  id serial primary key
+);
 ```
 
 Migrations are read from files in the migration directory in lexicographic

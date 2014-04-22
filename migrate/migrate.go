@@ -1,11 +1,13 @@
 package migrate
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/JackC/pgx"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
+	"text/template"
 )
 
 type BadVersionError string
@@ -41,13 +43,15 @@ type Migrator struct {
 	conn         *pgx.Connection
 	versionTable string
 	Migrations   []*Migration
-	OnStart      func(*Migration, string) // OnStart is called when a migration is run with the migration and direction
+	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and evaluated SQL
+	Data         map[string]interface{}              // Data available to use in migrations
 }
 
 func NewMigrator(conn *pgx.Connection, versionTable string) (m *Migrator, err error) {
 	m = &Migrator{conn: conn, versionTable: versionTable}
 	err = m.ensureSchemaVersionTableExists()
 	m.Migrations = make([]*Migration, 0)
+	m.Data = make(map[string]interface{})
 	return
 }
 
@@ -79,7 +83,14 @@ func (m *Migrator) LoadMigrations(path string) error {
 }
 
 func (m *Migrator) AppendMigration(name, upSQL, downSQL string) {
-	m.Migrations = append(m.Migrations, &Migration{Sequence: int32(len(m.Migrations)) + 1, Name: name, UpSQL: upSQL, DownSQL: downSQL})
+	m.Migrations = append(
+		m.Migrations,
+		&Migration{
+			Sequence: int32(len(m.Migrations)) + 1,
+			Name:     name,
+			UpSQL:    upSQL,
+			DownSQL:  downSQL,
+		})
 	return
 }
 
@@ -124,6 +135,8 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 		var current *Migration
 		var sql, directionName string
 		var sequence int32
+		var tmpl *template.Template
+		var buf bytes.Buffer
 		if direction == 1 {
 			current = m.Migrations[currentVersion]
 			sequence = current.Sequence
@@ -139,16 +152,26 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 			}
 		}
 
+		tmpl, err = template.New(current.Name + " " + directionName).Parse(sql)
+		if err != nil {
+			return err
+		}
+
+		err = tmpl.Execute(&buf, m.Data)
+		if err != nil {
+			return err
+		}
+
 		var innerErr error
 		_, txErr := m.conn.Transaction(func() bool {
 
 			// Fire on start callback
 			if m.OnStart != nil {
-				m.OnStart(current, directionName)
+				m.OnStart(current.Sequence, current.Name, directionName, buf.String())
 			}
 
 			// Execute the migration
-			if _, innerErr = m.conn.Execute(sql); innerErr != nil {
+			if _, innerErr = m.conn.Execute(buf.String()); innerErr != nil {
 				return false
 			}
 
