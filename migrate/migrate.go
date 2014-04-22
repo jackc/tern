@@ -56,6 +56,25 @@ func NewMigrator(conn *pgx.Connection, versionTable string) (m *Migrator, err er
 }
 
 func (m *Migrator) LoadMigrations(path string) error {
+	mainTmpl := template.New("main")
+	sharedPaths, err := filepath.Glob(filepath.Join(path, "*", "*.sql"))
+	if err != nil {
+		return err
+	}
+
+	for _, p := range sharedPaths {
+		body, err := ioutil.ReadFile(p)
+		if err != nil {
+			return err
+		}
+
+		name := strings.Replace(p, path+string(filepath.Separator), "", 1)
+		_, err = mainTmpl.New(name).Parse(string(body))
+		if err != nil {
+			return err
+		}
+	}
+
 	paths, err := filepath.Glob(filepath.Join(path, "*.sql"))
 	if err != nil {
 		return err
@@ -79,12 +98,15 @@ func (m *Migrator) LoadMigrations(path string) error {
 
 		var tmpl *template.Template
 		var buf bytes.Buffer
-		tmpl, err = template.New(filepath.Base(p) + " up").Parse(upSQL)
+		var name string
+
+		name = filepath.Base(p) + " up"
+		tmpl, err = mainTmpl.New(name).Parse(upSQL)
 		if err != nil {
 			return err
 		}
 
-		err = tmpl.Execute(&buf, m.Data)
+		err = tmpl.ExecuteTemplate(&buf, name, m.Data)
 		if err != nil {
 			return err
 		}
@@ -93,12 +115,13 @@ func (m *Migrator) LoadMigrations(path string) error {
 
 		buf.Reset()
 
-		tmpl, err = template.New(filepath.Base(p) + " down").Parse(downSQL)
+		name = filepath.Base(p) + " down"
+		tmpl, err = template.New(name).Parse(downSQL)
 		if err != nil {
 			return err
 		}
 
-		err = tmpl.Execute(&buf, m.Data)
+		err = tmpl.ExecuteTemplate(&buf, name, m.Data)
 		if err != nil {
 			return err
 		}

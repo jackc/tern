@@ -119,7 +119,7 @@ func (s *MigrateSuite) TestLoadMigrations(c *C) {
 	m.Data = map[string]interface{}{"prefix": "foo"}
 	err := m.LoadMigrations("testdata/sample")
 	c.Assert(err, IsNil)
-	c.Assert(m.Migrations, HasLen, 4)
+	c.Assert(m.Migrations, HasLen, 5)
 
 	c.Check(m.Migrations[0].Name, Equals, "001_create_t1.sql")
 	c.Check(m.Migrations[0].UpSQL, Equals, `create table t1(
