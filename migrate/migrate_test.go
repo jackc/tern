@@ -116,9 +116,10 @@ func (s *MigrateSuite) TestLoadMigrationsEmptyDirectory(c *C) {
 
 func (s *MigrateSuite) TestLoadMigrations(c *C) {
 	m := s.createEmptyMigrator(c)
+	m.Data = map[string]interface{}{"prefix": "foo"}
 	err := m.LoadMigrations("testdata/sample")
 	c.Assert(err, IsNil)
-	c.Assert(m.Migrations, HasLen, 3)
+	c.Assert(m.Migrations, HasLen, 4)
 
 	c.Check(m.Migrations[0].Name, Equals, "001_create_t1.sql")
 	c.Check(m.Migrations[0].UpSQL, Equals, `create table t1(
@@ -135,6 +136,10 @@ func (s *MigrateSuite) TestLoadMigrations(c *C) {
 	c.Check(m.Migrations[2].Name, Equals, "003_irreversible.sql")
 	c.Check(m.Migrations[2].UpSQL, Equals, "drop table t2;")
 	c.Check(m.Migrations[2].DownSQL, Equals, "")
+
+	c.Check(m.Migrations[3].Name, Equals, "004_data_interpolation.sql")
+	c.Check(m.Migrations[3].UpSQL, Equals, "create table foo_bar(id serial primary key);")
+	c.Check(m.Migrations[3].DownSQL, Equals, "drop table foo_bar;")
 }
 
 func (s *MigrateSuite) TestMigrate(c *C) {
@@ -151,7 +156,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 
 	var onStartCallUpCount int
 	var onStartCallDownCount int
-	m.OnStart = func(_ *migrate.Migration, direction string) {
+	m.OnStart = func(_ int32, _, direction, _ string) {
 		switch direction {
 		case "up":
 			onStartCallUpCount++
@@ -252,17 +257,6 @@ func (s *MigrateSuite) TestMigrateToIrreversible(c *C) {
 	c.Assert(err, ErrorMatches, "Irreversible migration: 1 - Foo")
 }
 
-func (s *MigrateSuite) TestMigrateToTemplateData(c *C) {
-	m := s.createEmptyMigrator(c)
-	m.AppendMigration("Foo", "create table {{.tableName}}(id serial primary key);", "")
-	m.Data["tableName"] = "t1"
-
-	err := m.MigrateTo(1)
-	c.Assert(err, IsNil)
-
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-}
-
 func Example_OnStartMigrationProgressLogging() {
 	conn, err := pgx.Connect(*defaultConnectionParameters)
 	if err != nil {
@@ -283,8 +277,8 @@ func Example_OnStartMigrationProgressLogging() {
 		return
 	}
 
-	m.OnStart = func(migration *migrate.Migration, direction string) {
-		fmt.Printf("Migrating %s: %s", direction, migration.Name)
+	m.OnStart = func(_ int32, name, direction, _ string) {
+		fmt.Printf("Migrating %s: %s", direction, name)
 	}
 
 	m.AppendMigration("create a table", "create temporary table foo(id serial primary key)", "")

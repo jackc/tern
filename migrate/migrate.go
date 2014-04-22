@@ -43,7 +43,7 @@ type Migrator struct {
 	conn         *pgx.Connection
 	versionTable string
 	Migrations   []*Migration
-	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and evaluated SQL
+	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and SQL
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
@@ -76,6 +76,35 @@ func (m *Migrator) LoadMigrations(path string) error {
 		if len(pieces) == 2 {
 			downSQL = strings.TrimSpace(pieces[1])
 		}
+
+		var tmpl *template.Template
+		var buf bytes.Buffer
+		tmpl, err = template.New(filepath.Base(p) + " up").Parse(upSQL)
+		if err != nil {
+			return err
+		}
+
+		err = tmpl.Execute(&buf, m.Data)
+		if err != nil {
+			return err
+		}
+
+		upSQL = buf.String()
+
+		buf.Reset()
+
+		tmpl, err = template.New(filepath.Base(p) + " down").Parse(downSQL)
+		if err != nil {
+			return err
+		}
+
+		err = tmpl.Execute(&buf, m.Data)
+		if err != nil {
+			return err
+		}
+
+		downSQL = buf.String()
+
 		m.AppendMigration(filepath.Base(p), upSQL, downSQL)
 	}
 
@@ -135,8 +164,6 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 		var current *Migration
 		var sql, directionName string
 		var sequence int32
-		var tmpl *template.Template
-		var buf bytes.Buffer
 		if direction == 1 {
 			current = m.Migrations[currentVersion]
 			sequence = current.Sequence
@@ -152,26 +179,16 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 			}
 		}
 
-		tmpl, err = template.New(current.Name + " " + directionName).Parse(sql)
-		if err != nil {
-			return err
-		}
-
-		err = tmpl.Execute(&buf, m.Data)
-		if err != nil {
-			return err
-		}
-
 		var innerErr error
 		_, txErr := m.conn.Transaction(func() bool {
 
 			// Fire on start callback
 			if m.OnStart != nil {
-				m.OnStart(current.Sequence, current.Name, directionName, buf.String())
+				m.OnStart(current.Sequence, current.Name, directionName, sql)
 			}
 
 			// Execute the migration
-			if _, innerErr = m.conn.Execute(buf.String()); innerErr != nil {
+			if _, innerErr = m.conn.Execute(sql); innerErr != nil {
 				return false
 			}
 
