@@ -116,6 +116,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.1.1 (April 22, 2014)
+
+* Do not require user -- default to OS user
+
 ## 1.1.0 (April 22, 2014)
 
 * Add sub-template support
