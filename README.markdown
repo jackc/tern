@@ -13,7 +13,8 @@ Tern projects are composed of a config file and a directory of
 migrations. See the sample directory for an example. By default tern will look
 in the current directory for the config file tern.conf and the migrations.
 
-The config file requires socket or host, database, and user.
+The config file requires socket or host and database. User defaults to the
+current OS user.
 
 ```ini
 [database]

@@ -36,10 +36,6 @@ func (c *Config) Validate() error {
 		return errors.New("Config must contain database but it does not")
 	}
 
-	if c.ConnectionParameters.User == "" {
-		return errors.New("Config must contain user but it does not")
-	}
-
 	return nil
 }
 
