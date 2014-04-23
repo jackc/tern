@@ -115,16 +115,23 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
-* **Unreleased**
-  * Add sub-template support
-  * Switch to ini for config files
-  * Add custom data merging
-* **1.0.0**
-  * Total rewrite in Go
-* **0.7.1**
-  * Print friendly error message when database error occurs instead of stack trace.
-* **0.7.0**
-  * Added ERB processing to SQL files
+## 1.1.0 (April 22, 2014)
+
+* Add sub-template support
+* Switch to ini for config files
+* Add custom data merging
+
+## 1.0.0 (April 19, 2014)
+
+* Total rewrite in Go
+
+## 0.7.1
+
+* Print friendly error message when database error occurs instead of stack trace.
+
+## 0.7.0
+
+* Added ERB processing to SQL files
 
 ## License
 

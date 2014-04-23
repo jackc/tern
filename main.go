@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const VERSION = "1.1.0pre"
+const VERSION = "1.1.0"
 
 type Opts struct {
 	Destination    string `short:"d" long:"destination" description:"Destination migration version" default:"last"`
