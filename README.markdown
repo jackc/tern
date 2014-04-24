@@ -5,7 +5,6 @@ Tern is a standalone migration tool for PostgreSQL.
 ## Installation
 
     go get github.com/JackC/tern
-    go install github.com/JackC/tern
 
 ## Creating a Tern Project
 
