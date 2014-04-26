@@ -37,12 +37,22 @@ func main() {
 	app.Name = "tern"
 	app.Usage = "PostgreSQL database migrator"
 	app.Version = VERSION
-	app.Flags = []cli.Flag{
-		cli.StringFlag{"destination, d", "last", "Destination migration version"},
-		cli.StringFlag{"migrations, m", ".", "Migrations path"},
-		cli.StringFlag{"config, c", "tern.conf", "Config path"},
+
+	app.Commands = []cli.Command{
+		{
+			Name:        "migrate",
+			ShortName:   "m",
+			Usage:       "migrate the database",
+			Description: "migrate will migrate the database to destination version",
+			Flags: []cli.Flag{
+				cli.StringFlag{"destination, d", "last", "Destination migration version"},
+				cli.StringFlag{"migrations, m", ".", "Migrations path"},
+				cli.StringFlag{"config, c", "tern.conf", "Config path"},
+			},
+			Action: Migrate,
+		},
 	}
-	app.Action = Migrate
+
 	app.Run(os.Args)
 }
 
