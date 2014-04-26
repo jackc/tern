@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/JackC/pgx"
 	"github.com/JackC/tern/migrate"
-	"github.com/jessevdk/go-flags"
+	"github.com/codegangsta/cli"
 	"github.com/vaughan0/go-ini"
 	"os"
 	"strconv"
@@ -13,13 +13,6 @@ import (
 )
 
 const VERSION = "1.1.1"
-
-type Opts struct {
-	Destination    string `short:"d" long:"destination" description:"Destination migration version" default:"last"`
-	MigrationsPath string `short:"m" long:"migrations" description:"Migrations path" default:"."`
-	ConfigPath     string `short:"c" long:"config" description:"Config path" default:"tern.conf"`
-	Version        bool   `long:"version" description:"Display version and exit"`
-}
 
 type Config struct {
 	ConnectionParameters pgx.ConnectionParameters
@@ -40,21 +33,21 @@ func (c *Config) Validate() error {
 }
 
 func main() {
-	var err error
-	var opts Opts
-
-	parser := flags.NewParser(&opts, flags.Default)
-	_, err = parser.Parse()
-	if err != nil {
-		os.Exit(1)
+	app := cli.NewApp()
+	app.Name = "tern"
+	app.Usage = "PostgreSQL database migrator"
+	app.Version = VERSION
+	app.Flags = []cli.Flag{
+		cli.StringFlag{"destination, d", "last", "Destination migration version"},
+		cli.StringFlag{"migrations, m", ".", "Migrations path"},
+		cli.StringFlag{"config, c", "tern.conf", "Config path"},
 	}
+	app.Action = Migrate
+	app.Run(os.Args)
+}
 
-	if opts.Version {
-		fmt.Println("tern " + VERSION)
-		os.Exit(0)
-	}
-
-	config, err := ReadConfig(opts.ConfigPath)
+func Migrate(c *cli.Context) {
+	config, err := ReadConfig(c.String("config"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading config:\n  %v\n", err)
 		os.Exit(1)
@@ -81,7 +74,8 @@ func main() {
 	}
 	migrator.Data = config.Data
 
-	err = migrator.LoadMigrations(opts.MigrationsPath)
+	migrationsPath := c.String("migrations")
+	err = migrator.LoadMigrations(migrationsPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -95,11 +89,12 @@ func main() {
 		fmt.Printf("%s executing %s %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), name, direction, sql)
 	}
 
-	if opts.Destination == "last" {
+	destination := c.String("destination")
+	if destination == "last" {
 		err = migrator.Migrate()
 	} else {
 		var n int64
-		n, err = strconv.ParseInt(opts.Destination, 10, 32)
+		n, err = strconv.ParseInt(destination, 10, 32)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Bad destination:\n  %v\n", err)
 			os.Exit(1)
