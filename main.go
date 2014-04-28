@@ -3,16 +3,46 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/JackC/cli"
 	"github.com/JackC/pgx"
 	"github.com/JackC/tern/migrate"
-	"github.com/codegangsta/cli"
 	"github.com/vaughan0/go-ini"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
 
 const VERSION = "1.1.1"
+
+var defaultConf = `[database]
+# socket or host is required
+# socket =
+# host =
+# port = 5432
+# database is required
+# database =
+# user defaults to OS user
+# user =
+# version_table = schema_version
+
+[data]
+# Any fields in the data section are available in migration templates
+# prefix = foo
+`
+
+var sampleMigration = `-- This is a sample migration.
+
+create table people(
+  id serial primary key,
+  first_name varchar not null,
+  last_name varchar not null
+);
+
+---- create above / drop below ----
+
+drop table people;
+`
 
 type Config struct {
 	ConnectionParameters pgx.ConnectionParameters
@@ -37,13 +67,24 @@ func main() {
 	app.Name = "tern"
 	app.Usage = "PostgreSQL database migrator"
 	app.Version = VERSION
+	app.Author = "Jack Christensen"
+	app.Email = "jack@jackchristensen.com"
 
 	app.Commands = []cli.Command{
+		{
+			Name:        "init",
+			ShortName:   "i",
+			Usage:       "init a new tern project",
+			Synopsis:    "[directory]",
+			Description: "Initialize a new tern project in directory",
+			Action:      Init,
+		},
 		{
 			Name:        "migrate",
 			ShortName:   "m",
 			Usage:       "migrate the database",
-			Description: "migrate will migrate the database to destination version",
+			Synopsis:    "[command options]",
+			Description: "migrate the database to destination version",
 			Flags: []cli.Flag{
 				cli.StringFlag{"destination, d", "last", "Destination migration version"},
 				cli.StringFlag{"migrations, m", ".", "Migrations path"},
@@ -54,6 +95,54 @@ func main() {
 	}
 
 	app.Run(os.Args)
+}
+
+func Init(c *cli.Context) {
+	var directory string
+	switch len(c.Args()) {
+	case 0:
+		directory = "."
+	case 1:
+		directory = c.Args()[0]
+		err := os.Mkdir(directory, os.ModePerm)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	default:
+		cli.ShowCommandHelp(c, c.Command.Name)
+		os.Exit(1)
+	}
+
+	// Write default conf file
+	confPath := filepath.Join(directory, "tern.conf")
+	confFile, err := os.OpenFile(confPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.ModePerm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer confFile.Close()
+
+	_, err = confFile.WriteString(defaultConf)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	// Write sample migration
+	smPath := filepath.Join(directory, "001_create_people.sql.example")
+	smFile, err := os.OpenFile(smPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.ModePerm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer smFile.Close()
+
+	_, err = smFile.WriteString(sampleMigration)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func Migrate(c *cli.Context) {
