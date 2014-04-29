@@ -105,13 +105,19 @@ func (s *MigrateSuite) TestAppendMigration(c *C) {
 func (s *MigrateSuite) TestLoadMigrationsMissingDirectory(c *C) {
 	m := s.createEmptyMigrator(c)
 	err := m.LoadMigrations("testdata/missing")
-	c.Assert(err, ErrorMatches, "No migrations found at testdata/missing")
+	c.Assert(err, ErrorMatches, "open testdata/missing: no such file or directory")
 }
 
 func (s *MigrateSuite) TestLoadMigrationsEmptyDirectory(c *C) {
 	m := s.createEmptyMigrator(c)
 	err := m.LoadMigrations("testdata/empty")
 	c.Assert(err, ErrorMatches, "No migrations found at testdata/empty")
+}
+
+func (s *MigrateSuite) TestLoadMigrationsWithGaps(c *C) {
+	m := s.createEmptyMigrator(c)
+	err := m.LoadMigrations("testdata/gap")
+	c.Assert(err, ErrorMatches, "Missing migration 2")
 }
 
 func (s *MigrateSuite) TestLoadMigrations(c *C) {

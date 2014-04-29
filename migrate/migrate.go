@@ -6,9 +6,13 @@ import (
 	"github.com/JackC/pgx"
 	"io/ioutil"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"text/template"
 )
+
+var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
 
 type BadVersionError string
 
@@ -75,10 +79,35 @@ func (m *Migrator) LoadMigrations(path string) error {
 		}
 	}
 
-	paths, err := filepath.Glob(filepath.Join(path, "*.sql"))
+	fileInfos, err := ioutil.ReadDir(path)
 	if err != nil {
 		return err
 	}
+
+	paths := make([]string, 0, len(fileInfos))
+	for i, fi := range fileInfos {
+		if fi.IsDir() {
+			continue
+		}
+
+		matches := migrationPattern.FindStringSubmatch(fi.Name())
+		if len(matches) != 2 {
+			continue
+		}
+
+		n, err := strconv.ParseInt(matches[1], 10, 32)
+		if err != nil {
+			// The regexp already validated that the prefix is all digits so this *should* never fail
+			return err
+		}
+
+		if int64(i+1) != n {
+			return fmt.Errorf("Missing migration %d", i+1)
+		}
+
+		paths = append(paths, filepath.Join(path, fi.Name()))
+	}
+
 	if len(paths) == 0 {
 		return NoMigrationsFoundError{Path: path}
 	}

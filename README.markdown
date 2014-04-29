@@ -66,8 +66,8 @@ create table {{.prefix}}config(
 ```
 
 Migrations are read from files in the migration directory in lexicographic
-order. Typically, migration files will be prefix with 001, 002, 003, etc., but
-that is not strictly necessary, Each migration is run in a transaction.
+order. Migration files must have a numerical prefix such as 001, 002, 003, etc.
+Each migration is run in a transaction.
 
 Any SQL files in subdirectories of the migration directory, will be available
 for inclusion with the template command. This can be especially useful for
