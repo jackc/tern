@@ -60,6 +60,8 @@ func NewMigrator(conn *pgx.Connection, versionTable string) (m *Migrator, err er
 }
 
 func (m *Migrator) LoadMigrations(path string) error {
+	path = strings.TrimRight(path, string(filepath.Separator))
+
 	mainTmpl := template.New("main")
 	sharedPaths, err := filepath.Glob(filepath.Join(path, "*", "*.sql"))
 	if err != nil {
