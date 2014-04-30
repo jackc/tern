@@ -59,6 +59,41 @@ func NewMigrator(conn *pgx.Connection, versionTable string) (m *Migrator, err er
 	return
 }
 
+func FindMigrations(path string) ([]string, error) {
+	path = strings.TrimRight(path, string(filepath.Separator))
+
+	fileInfos, err := ioutil.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+
+	paths := make([]string, 0, len(fileInfos))
+	for _, fi := range fileInfos {
+		if fi.IsDir() {
+			continue
+		}
+
+		matches := migrationPattern.FindStringSubmatch(fi.Name())
+		if len(matches) != 2 {
+			continue
+		}
+
+		n, err := strconv.ParseInt(matches[1], 10, 32)
+		if err != nil {
+			// The regexp already validated that the prefix is all digits so this *should* never fail
+			return nil, err
+		}
+
+		if int64(len(paths)+1) != n {
+			return nil, fmt.Errorf("Missing migration %d", len(paths)+1)
+		}
+
+		paths = append(paths, filepath.Join(path, fi.Name()))
+	}
+
+	return paths, nil
+}
+
 func (m *Migrator) LoadMigrations(path string) error {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
@@ -81,33 +116,9 @@ func (m *Migrator) LoadMigrations(path string) error {
 		}
 	}
 
-	fileInfos, err := ioutil.ReadDir(path)
+	paths, err := FindMigrations(path)
 	if err != nil {
 		return err
-	}
-
-	paths := make([]string, 0, len(fileInfos))
-	for i, fi := range fileInfos {
-		if fi.IsDir() {
-			continue
-		}
-
-		matches := migrationPattern.FindStringSubmatch(fi.Name())
-		if len(matches) != 2 {
-			continue
-		}
-
-		n, err := strconv.ParseInt(matches[1], 10, 32)
-		if err != nil {
-			// The regexp already validated that the prefix is all digits so this *should* never fail
-			return err
-		}
-
-		if int64(i+1) != n {
-			return fmt.Errorf("Missing migration %d", i+1)
-		}
-
-		paths = append(paths, filepath.Join(path, fi.Name()))
 	}
 
 	if len(paths) == 0 {

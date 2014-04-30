@@ -114,9 +114,8 @@ func (s *MigrateSuite) TestLoadMigrationsEmptyDirectory(c *C) {
 	c.Assert(err, ErrorMatches, "No migrations found at testdata/empty")
 }
 
-func (s *MigrateSuite) TestLoadMigrationsWithGaps(c *C) {
-	m := s.createEmptyMigrator(c)
-	err := m.LoadMigrations("testdata/gap")
+func (s *MigrateSuite) TestFindMigrationsWithGaps(c *C) {
+	_, err := migrate.FindMigrations("testdata/gap")
 	c.Assert(err, ErrorMatches, "Missing migration 2")
 }
 
