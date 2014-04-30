@@ -44,6 +44,14 @@ create table people(
 drop table people;
 `
 
+var newMigrationText = `-- Write your migrate up statements here
+
+---- create above / drop below ----
+
+-- Write your migrate down statements here. If this migration is irreversible
+-- Then delete the separator line above.
+`
+
 type Config struct {
 	ConnectionParameters pgx.ConnectionParameters
 	VersionTable         string
@@ -91,6 +99,18 @@ func main() {
 				cli.StringFlag{"config, c", "tern.conf", "Config path"},
 			},
 			Action: Migrate,
+		},
+		{
+			Name:        "new",
+			ShortName:   "m",
+			Usage:       "generate a new migration",
+			Synopsis:    "[command options] name",
+			Description: "generate a new migration with the next sequence number and provided name",
+			Flags: []cli.Flag{
+				cli.StringFlag{"migrations, m", ".", "Migrations path"},
+				cli.StringFlag{"config, c", "tern.conf", "Config path"},
+			},
+			Action: NewMigration,
 		},
 	}
 
@@ -143,6 +163,66 @@ func Init(c *cli.Context) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func NewMigration(c *cli.Context) {
+	if len(c.Args()) != 1 {
+		cli.ShowCommandHelp(c, c.Command.Name)
+		os.Exit(1)
+	}
+
+	name := c.Args()[0]
+
+	config, err := ReadConfig(c.String("config"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading config:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	err = config.Validate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid config:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	var conn *pgx.Connection
+	conn, err = pgx.Connect(config.ConnectionParameters)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+
+	migrator, err := migrate.NewMigrator(conn, config.VersionTable)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	migrationsPath := c.String("migrations")
+	err = migrator.LoadMigrations(migrationsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	newMigrationName := fmt.Sprintf("%03d_%s.sql", len(migrator.Migrations)+1, name)
+
+	// Write new migration
+	mPath := filepath.Join(migrationsPath, newMigrationName)
+	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.ModePerm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer mFile.Close()
+
+	_, err = mFile.WriteString(newMigrationText)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 }
 
 func Migrate(c *cli.Context) {
