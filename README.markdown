@@ -149,6 +149,12 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.2.0 (Unreleased)
+
+* Move to subcommand interface
+* Require migrations to begin with ascending, gapless numbers
+* Fix: migrations directory can contain other files
+
 ## 1.1.1 (April 22, 2014)
 
 * Do not require user -- default to OS user
