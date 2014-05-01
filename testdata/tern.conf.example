@@ -1,0 +1,14 @@
+[database]
+# socket or host is required
+socket = /private/tmp/.s.PGSQL.5432
+# host =
+# port = 5432
+# database is required
+database = tern_test
+# user defaults to OS user
+# user =
+# version_table = schema_version
+
+[data]
+# Any fields in the data section are available in migration templates
+# prefix = foo

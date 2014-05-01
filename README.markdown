@@ -8,9 +8,17 @@ Tern is a standalone migration tool for PostgreSQL.
 
 ## Creating a Tern Project
 
-Tern projects are composed of a config file and a directory of
-migrations. See the sample directory for an example. By default tern will look
-in the current directory for the config file tern.conf and the migrations.
+To create a new tern project in the current directory run:
+
+    tern init
+
+Or to create the project somewhere else:
+
+    tern init path/to/project
+
+Tern projects are composed of a config file and a directory of migrations. See
+the sample directory for an example. By default tern will look in the current
+directory for the config file tern.conf and the migrations.
 
 The config file requires socket or host and database. User defaults to the
 current OS user.
@@ -31,6 +39,14 @@ prefix = foo
 ```
 
 Values in the data section will be available for interpolation into migrations.
+
+## Migrations
+
+To create a new migration:
+
+    tern new name_of_migration
+
+This will create a migration file with the given name prefixed by the next available sequence number (e.g. 001, 002, 003).
 
 The migrations themselves have an extremely simple file format. They are
 simply the up and down SQL statements divided by a magic comment.
@@ -65,9 +81,8 @@ create table {{.prefix}}config(
 );
 ```
 
-Migrations are read from files in the migration directory in lexicographic
-order. Migration files must have a numerical prefix such as 001, 002, 003, etc.
-Each migration is run in a transaction.
+Migrations are read from files in the migration directory in the order of the
+numerical prefix. Each migration is run in a transaction.
 
 Any SQL files in subdirectories of the migration directory, will be available
 for inclusion with the template command. This can be especially useful for
@@ -91,21 +106,40 @@ package docs for details.
 To migrate up to the last version using migrations and config file located in
 the same directory simply run tern:
 
-    tern
+    tern migrate
 
 To migrate up or down to a specific version:
 
-    tern --destination 42
+    tern migrate --destination 42
 
 To use a different config file:
 
-    tern --config path/to/tern.json
+    tern migrate --config path/to/tern.json
+
+To use a different migrations directory:
+
+    tern migrate --migrations path/to/migrations
 
 ## Embedding Tern
 
 All the actual functionality of tern is in the github.com/JackC/tern/migrate
 library. If you need to embed migrations into your own application this
 library can help.
+
+## Running the Tests
+
+To run the tests tern requires a test database to run migrations against.
+
+# Create a new database for main tern program tests.
+# Open testdata/tern.conf.example
+# Enter the connection information.
+# Save as testdata/tern.conf.
+# Create another database for the migrate library tests.
+# Open migrate/connection_settings_test.go.example.
+# Enter the second database's connection information.
+# Save as migrate/connection_settings_test.go.
+
+    go test ./...
 
 ## Prior Ruby Gem Version
 

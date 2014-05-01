@@ -21,4 +21,6 @@ _testmain.go
 
 *.exe
 
-connection_settings_test.go
+migrate/connection_settings_test.go
+testdata/tern.conf
+tern

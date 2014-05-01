@@ -108,7 +108,6 @@ func main() {
 			Description: "generate a new migration with the next sequence number and provided name",
 			Flags: []cli.Flag{
 				cli.StringFlag{"migrations, m", ".", "Migrations path"},
-				cli.StringFlag{"config, c", "tern.conf", "Config path"},
 			},
 			Action: NewMigration,
 		},
@@ -173,40 +172,14 @@ func NewMigration(c *cli.Context) {
 
 	name := c.Args()[0]
 
-	config, err := ReadConfig(c.String("config"))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading config:\n  %v\n", err)
-		os.Exit(1)
-	}
-
-	err = config.Validate()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid config:\n  %v\n", err)
-		os.Exit(1)
-	}
-
-	var conn *pgx.Connection
-	conn, err = pgx.Connect(config.ConnectionParameters)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	migrator, err := migrate.NewMigrator(conn, config.VersionTable)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
-		os.Exit(1)
-	}
-
 	migrationsPath := c.String("migrations")
-	err = migrator.LoadMigrations(migrationsPath)
+	migrations, err := migrate.FindMigrations(migrationsPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
 	}
 
-	newMigrationName := fmt.Sprintf("%03d_%s.sql", len(migrator.Migrations)+1, name)
+	newMigrationName := fmt.Sprintf("%03d_%s.sql", len(migrations)+1, name)
 
 	// Write new migration
 	mPath := filepath.Join(migrationsPath, newMigrationName)
