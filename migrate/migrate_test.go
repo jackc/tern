@@ -119,6 +119,11 @@ func (s *MigrateSuite) TestFindMigrationsWithGaps(c *C) {
 	c.Assert(err, ErrorMatches, "Missing migration 2")
 }
 
+func (s *MigrateSuite) TestFindMigrationsWithDuplicate(c *C) {
+	_, err := migrate.FindMigrations("testdata/duplicate")
+	c.Assert(err, ErrorMatches, "Duplicate migration 2")
+}
+
 func (s *MigrateSuite) TestLoadMigrations(c *C) {
 	m := s.createEmptyMigrator(c)
 	m.Data = map[string]interface{}{"prefix": "foo"}

@@ -155,6 +155,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 * Require migrations to begin with ascending, gapless numbers
 * Fix: migrations directory can contain other files
 * Fix: gracefully handle invalid current version
+* Fix: gracefully handle migrations with duplicate sequence number
 
 ## 1.1.1 (April 22, 2014)
 

@@ -84,7 +84,11 @@ func FindMigrations(path string) ([]string, error) {
 			return nil, err
 		}
 
-		if int64(len(paths)+1) != n {
+		if n < int64(len(paths)+1) {
+			return nil, fmt.Errorf("Duplicate migration %d", n)
+		}
+
+		if int64(len(paths)+1) < n {
 			return nil, fmt.Errorf("Missing migration %d", len(paths)+1)
 		}
 
