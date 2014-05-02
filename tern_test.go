@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"fmt"
 	"github.com/JackC/pgx"
 	"github.com/vaughan0/go-ini"
 	. "gopkg.in/check.v1"
@@ -72,8 +71,7 @@ func (s *TernSuite) tern(c *C, args ...string) {
 	cmd := exec.Command("tmp/tern", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Println(output)
-		c.Fatalf("tern failed with: %v\noutput: %v", err, string(output))
+		c.Fatalf("tern failed with: %v\noutput:\n%v", err, string(output))
 	}
 }
 
