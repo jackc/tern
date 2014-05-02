@@ -205,7 +205,12 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 	}
 
 	if targetVersion < 0 || int32(len(m.Migrations)) < targetVersion {
-		errMsg := fmt.Sprintf("%s version %d is outside the valid versions of 0 to %d", m.versionTable, targetVersion, len(m.Migrations))
+		errMsg := fmt.Sprintf("destination version %d is outside the valid versions of 0 to %d", targetVersion, len(m.Migrations))
+		return BadVersionError(errMsg)
+	}
+
+	if currentVersion < 0 || int32(len(m.Migrations)) < currentVersion {
+		errMsg := fmt.Sprintf("current version %d is outside the valid versions of 0 to %d", currentVersion, len(m.Migrations))
 		return BadVersionError(errMsg)
 	}
 

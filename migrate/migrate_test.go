@@ -244,11 +244,21 @@ func (s *MigrateSuite) TestMigrateToBoundaries(c *C) {
 
 	// Migrate to -1 is error
 	err := m.MigrateTo(-1)
-	c.Assert(err, ErrorMatches, "schema_version version -1 is outside the valid versions of 0 to 3")
+	c.Assert(err, ErrorMatches, "destination version -1 is outside the valid versions of 0 to 3")
 
 	// Migrate past end is error
 	err = m.MigrateTo(int32(len(m.Migrations)) + 1)
-	c.Assert(err, ErrorMatches, "schema_version version 4 is outside the valid versions of 0 to 3")
+	c.Assert(err, ErrorMatches, "destination version 4 is outside the valid versions of 0 to 3")
+
+	// When schema version says it is negative
+	s.Execute(c, "update schema_version set version=-1")
+	err = m.MigrateTo(int32(1))
+	c.Assert(err, ErrorMatches, "current version -1 is outside the valid versions of 0 to 3")
+
+	// When schema version says it is negative
+	s.Execute(c, "update schema_version set version=4")
+	err = m.MigrateTo(int32(1))
+	c.Assert(err, ErrorMatches, "current version 4 is outside the valid versions of 0 to 3")
 }
 
 func (s *MigrateSuite) TestMigrateToIrreversible(c *C) {
