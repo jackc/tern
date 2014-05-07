@@ -1,0 +1,23 @@
+{
+	"ImportPath": "github.com/JackC/tern",
+	"GoVersion": "go1.2.1",
+	"Deps": [
+		{
+			"ImportPath": "github.com/JackC/cli",
+			"Comment": "1.0.0-69-g2bb83f4",
+			"Rev": "2bb83f44aaf313148c8730ae2074fc055e563195"
+		},
+		{
+			"ImportPath": "github.com/JackC/pgx",
+			"Rev": "75ca2b3b1ce8606e42cef63bb0f36f006e1eaf77"
+		},
+		{
+			"ImportPath": "github.com/vaughan0/go-ini",
+			"Rev": "a98ad7ee00ec53921f08832bc06ecf7fd600e6a1"
+		},
+		{
+			"ImportPath": "gopkg.in/check.v1",
+			"Rev": "871360013c92e1c715c2de6d06b54899468a8a2d"
+		}
+	]
+}
