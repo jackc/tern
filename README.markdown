@@ -130,14 +130,14 @@ library can help.
 
 To run the tests tern requires a test database to run migrations against.
 
-# Create a new database for main tern program tests.
-# Open testdata/tern.conf.example
-# Enter the connection information.
-# Save as testdata/tern.conf.
-# Create another database for the migrate library tests.
-# Open migrate/connection_settings_test.go.example.
-# Enter the second database's connection information.
-# Save as migrate/connection_settings_test.go.
+1. Create a new database for main tern program tests.
+1. Open testdata/tern.conf.example
+1. Enter the connection information.
+1. Save as testdata/tern.conf.
+1. Create another database for the migrate library tests.
+1. Open migrate/connection_settings_test.go.example.
+1. Enter the second database's connection information.
+1. Save as migrate/connection_settings_test.go.
 
     go test ./...
 
@@ -149,7 +149,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
-## 1.2.0 (Unreleased)
+## 1.2.0 (May 6, 2014)
 
 * Move to subcommand interface
 * Require migrations to begin with ascending, gapless numbers
