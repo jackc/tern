@@ -23,4 +23,4 @@ _testmain.go
 
 migrate/connection_settings_test.go
 testdata/tern.conf
-tern
+/tern
