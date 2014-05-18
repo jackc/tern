@@ -44,12 +44,31 @@ func TestConnect(t *testing.T) {
 	}
 }
 
-func TestConnectWithUnixSocket(t *testing.T) {
+func TestConnectWithUnixSocketDirectory(t *testing.T) {
+	// /.s.PGSQL.5432
 	if unixSocketConnectionParameters == nil {
 		return
 	}
 
 	conn, err := pgx.Connect(*unixSocketConnectionParameters)
+	if err != nil {
+		t.Fatalf("Unable to establish connection: %v", err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatal("Unable to close connection")
+	}
+}
+
+func TestConnectWithUnixSocketFile(t *testing.T) {
+	if unixSocketConnectionParameters == nil {
+		return
+	}
+
+	connParams := *unixSocketConnectionParameters
+	connParams.Socket = connParams.Socket + "/.s.PGSQL.5432"
+	conn, err := pgx.Connect(connParams)
 	if err != nil {
 		t.Fatalf("Unable to establish connection: %v", err)
 	}
@@ -136,6 +155,63 @@ func TestConnectWithMD5Password(t *testing.T) {
 	err = conn.Close()
 	if err != nil {
 		t.Fatal("Unable to close connection")
+	}
+}
+
+func TestParseURI(t *testing.T) {
+	tests := []struct {
+		url        string
+		connParams pgx.ConnectionParameters
+	}{
+		{
+			url: "postgres://jack:secret@localhost:5432/mydb",
+			connParams: pgx.ConnectionParameters{
+				User:     "jack",
+				Password: "secret",
+				Host:     "localhost",
+				Port:     5432,
+				Database: "mydb",
+			},
+		},
+		{
+			url: "postgresql://jack:secret@localhost:5432/mydb",
+			connParams: pgx.ConnectionParameters{
+				User:     "jack",
+				Password: "secret",
+				Host:     "localhost",
+				Port:     5432,
+				Database: "mydb",
+			},
+		},
+		{
+			url: "postgres://jack@localhost:5432/mydb",
+			connParams: pgx.ConnectionParameters{
+				User:     "jack",
+				Host:     "localhost",
+				Port:     5432,
+				Database: "mydb",
+			},
+		},
+		{
+			url: "postgres://jack@localhost/mydb",
+			connParams: pgx.ConnectionParameters{
+				User:     "jack",
+				Host:     "localhost",
+				Database: "mydb",
+			},
+		},
+	}
+
+	for i, tt := range tests {
+		connParams, err := pgx.ParseURI(tt.url)
+		if err != nil {
+			t.Errorf("%d. Unexpected error from pgx.ParseURL(%q) => %v", i, tt.url, err)
+			continue
+		}
+
+		if connParams != tt.connParams {
+			t.Errorf("%d. expected %#v got %#v", i, tt.connParams, connParams)
+		}
 	}
 }
 

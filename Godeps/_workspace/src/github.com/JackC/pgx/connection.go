@@ -15,13 +15,17 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"net/url"
 	"os/user"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
 // ConnectionParameters contains all the options used to establish a connection.
 type ConnectionParameters struct {
-	Socket     string // path to unix domain socket (e.g. /private/tmp/.s.PGSQL.5432)
+	Socket     string // path to unix domain socket directory (e.g. /private/tmp)
 	Host       string // url (e.g. localhost)
 	Port       uint16 // default: 5432
 	Database   string
@@ -126,8 +130,14 @@ func Connect(parameters ConnectionParameters) (c *Connection, err error) {
 	}
 
 	if c.parameters.Socket != "" {
-		c.logger.Info(fmt.Sprintf("Dialing PostgreSQL server at socket: %s", c.parameters.Socket))
-		c.conn, err = net.Dial("unix", c.parameters.Socket)
+		// For backward compatibility accept socket file paths -- but directories are now preferred
+		socket := c.parameters.Socket
+		if !strings.Contains(socket, "/.s.PGSQL.") {
+			socket = filepath.Join(socket, ".s.PGSQL.") + strconv.FormatInt(int64(c.parameters.Port), 10)
+		}
+
+		c.logger.Info(fmt.Sprintf("Dialing PostgreSQL server at socket: %s", socket))
+		c.conn, err = net.Dial("unix", socket)
 		if err != nil {
 			c.logger.Error(fmt.Sprintf("Connection failed: %v", err))
 			return nil, err
@@ -206,6 +216,34 @@ func (c *Connection) Close() (err error) {
 	c.die(errors.New("Closed"))
 	c.logger.Info("Closed connection")
 	return err
+}
+
+// ParseURI parses a database URI into ConnectionParameters
+func ParseURI(uri string) (ConnectionParameters, error) {
+	var cp ConnectionParameters
+
+	url, err := url.Parse(uri)
+	if err != nil {
+		return cp, err
+	}
+
+	if url.User != nil {
+		cp.User = url.User.Username()
+		cp.Password, _ = url.User.Password()
+	}
+
+	parts := strings.SplitN(url.Host, ":", 2)
+	cp.Host = parts[0]
+	if len(parts) == 2 {
+		p, err := strconv.ParseUint(parts[1], 10, 16)
+		if err != nil {
+			return cp, err
+		}
+		cp.Port = uint16(p)
+	}
+	cp.Database = strings.TrimLeft(url.Path, "/")
+
+	return cp, nil
 }
 
 // SelectFunc executes sql and for each row returned calls onDataRow. sql can be
