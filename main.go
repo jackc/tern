@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const VERSION = "1.2.1"
+const VERSION = "1.2.2"
 
 var defaultConf = `[database]
 # socket or host is required
