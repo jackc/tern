@@ -102,7 +102,7 @@ func main() {
 		},
 		{
 			Name:        "new",
-			ShortName:   "m",
+			ShortName:   "n",
 			Usage:       "generate a new migration",
 			Synopsis:    "[command options] name",
 			Description: "generate a new migration with the next sequence number and provided name",
