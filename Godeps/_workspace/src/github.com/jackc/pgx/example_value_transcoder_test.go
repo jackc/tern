@@ -2,7 +2,7 @@ package pgx_test
 
 import (
 	"fmt"
-	"github.com/JackC/pgx"
+	"github.com/jackc/pgx"
 	"regexp"
 	"strconv"
 )

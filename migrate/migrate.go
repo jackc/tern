@@ -3,7 +3,7 @@ package migrate
 import (
 	"bytes"
 	"fmt"
-	"github.com/JackC/pgx"
+	"github.com/jackc/pgx"
 	"io/ioutil"
 	"path/filepath"
 	"regexp"

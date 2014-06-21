@@ -3,9 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/JackC/cli"
-	"github.com/JackC/pgx"
-	"github.com/JackC/tern/migrate"
+	"github.com/jackc/cli"
+	"github.com/jackc/pgx"
+	"github.com/jackc/tern/migrate"
 	"github.com/vaughan0/go-ini"
 	"os"
 	"path/filepath"

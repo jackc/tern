@@ -2,8 +2,8 @@ package migrate_test
 
 import (
 	"fmt"
-	"github.com/JackC/pgx"
-	"github.com/JackC/tern/migrate"
+	"github.com/jackc/pgx"
+	"github.com/jackc/tern/migrate"
 	. "gopkg.in/check.v1"
 	"testing"
 )

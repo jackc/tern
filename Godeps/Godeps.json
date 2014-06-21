@@ -1,14 +1,14 @@
 {
-	"ImportPath": "github.com/JackC/tern",
+	"ImportPath": "github.com/jackc/tern",
 	"GoVersion": "go1.2.2",
 	"Deps": [
 		{
-			"ImportPath": "github.com/JackC/cli",
+			"ImportPath": "github.com/jackc/cli",
 			"Comment": "1.0.0-69-g2bb83f4",
 			"Rev": "2bb83f44aaf313148c8730ae2074fc055e563195"
 		},
 		{
-			"ImportPath": "github.com/JackC/pgx",
+			"ImportPath": "github.com/jackc/pgx",
 			"Rev": "4f67f16296bc4062266b9e528f1907867950bcb6"
 		},
 		{

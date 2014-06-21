@@ -1,7 +1,7 @@
 package main_test
 
 import (
-	"github.com/JackC/pgx"
+	"github.com/jackc/pgx"
 	"github.com/vaughan0/go-ini"
 	. "gopkg.in/check.v1"
 	"os"

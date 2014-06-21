@@ -2,7 +2,7 @@ package pgx_test
 
 import (
 	"crypto/tls"
-	"github.com/JackC/pgx"
+	"github.com/jackc/pgx"
 )
 
 var defaultConnConfig *pgx.ConnConfig = &pgx.ConnConfig{Socket: "/var/run/postgresql", User: "pgx_md5", Password: "secret", Database: "pgx_test"}
