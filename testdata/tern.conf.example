@@ -1,7 +1,6 @@
 [database]
-# socket or host is required
-socket = /private/tmp/.s.PGSQL.5432
-# host =
+# host is required (network host or path to Unix domain socket)
+host = /var/run/postgresql
 # port = 5432
 # database is required
 database = tern_test

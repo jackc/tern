@@ -2,64 +2,66 @@ package pgx_test
 
 import (
 	"github.com/jackc/pgx"
-	"io"
 	"testing"
 )
 
-var sharedConnection *pgx.Connection
-
-func getSharedConnection(t testing.TB) (c *pgx.Connection) {
-	if sharedConnection == nil || !sharedConnection.IsAlive() {
-		var err error
-		sharedConnection, err = pgx.Connect(*defaultConnectionParameters)
-		if err != nil {
-			t.Fatalf("Unable to establish connection: %v", err)
-		}
-
+func mustConnect(t testing.TB, config pgx.ConnConfig) *pgx.Conn {
+	conn, err := pgx.Connect(config)
+	if err != nil {
+		t.Fatalf("Unable to establish connection: %v", err)
 	}
-	return sharedConnection
+	return conn
 }
 
-func mustPrepare(t testing.TB, conn *pgx.Connection, name, sql string) {
-	if err := conn.Prepare(name, sql); err != nil {
+func closeConn(t testing.TB, conn *pgx.Conn) {
+	err := conn.Close()
+	if err != nil {
+		t.Fatalf("conn.Close unexpectedly failed: %v", err)
+	}
+}
+
+func mustPrepare(t testing.TB, conn *pgx.Conn, name, sql string) *pgx.PreparedStatement {
+	ps, err := conn.Prepare(name, sql)
+	if err != nil {
 		t.Fatalf("Could not prepare %v: %v", name, err)
 	}
+
+	return ps
 }
 
-func mustExecute(t testing.TB, conn *pgx.Connection, sql string, arguments ...interface{}) (commandTag string) {
+func mustExec(t testing.TB, conn *pgx.Conn, sql string, arguments ...interface{}) (commandTag pgx.CommandTag) {
 	var err error
-	if commandTag, err = conn.Execute(sql, arguments...); err != nil {
-		t.Fatalf("Execute unexpectedly failed with %v: %v", sql, err)
+	if commandTag, err = conn.Exec(sql, arguments...); err != nil {
+		t.Fatalf("Exec unexpectedly failed with %v: %v", sql, err)
 	}
 	return
 }
 
-func mustSelectRow(t testing.TB, conn *pgx.Connection, sql string, arguments ...interface{}) (row map[string]interface{}) {
-	var err error
-	if row, err = conn.SelectRow(sql, arguments...); err != nil {
-		t.Fatalf("SelectRow unexpectedly failed with %v: %v", sql, err)
-	}
-	return
-}
+// Do a simple query to ensure the connection is still usable
+func ensureConnValid(t *testing.T, conn *pgx.Conn) {
+	var sum, rowCount int32
 
-func mustSelectRows(t testing.TB, conn *pgx.Connection, sql string, arguments ...interface{}) (rows []map[string]interface{}) {
-	var err error
-	if rows, err = conn.SelectRows(sql, arguments...); err != nil {
-		t.Fatalf("SelectRows unexpected failed with %v: %v", sql, err)
+	rows, err := conn.Query("select generate_series(1,$1)", 10)
+	if err != nil {
+		t.Fatalf("conn.Query failed: ", err)
 	}
-	return
-}
+	defer rows.Close()
 
-func mustSelectValue(t testing.TB, conn *pgx.Connection, sql string, arguments ...interface{}) (value interface{}) {
-	var err error
-	if value, err = conn.SelectValue(sql, arguments...); err != nil {
-		t.Fatalf("SelectValue unexpectedly failed with %v: %v", sql, err)
+	for rows.Next() {
+		var n int32
+		rows.Scan(&n)
+		sum += n
+		rowCount++
 	}
-	return
-}
 
-func mustSelectValueTo(t testing.TB, conn *pgx.Connection, w io.Writer, sql string, arguments ...interface{}) {
-	if err := conn.SelectValueTo(w, sql, arguments...); err != nil {
-		t.Fatalf("SelectValueTo unexpectedly failed with %v: %v", sql, err)
+	if rows.Err() != nil {
+		t.Fatalf("conn.Query failed: ", err)
+	}
+
+	if rowCount != 10 {
+		t.Error("Select called onDataRow wrong number of times")
+	}
+	if sum != 55 {
+		t.Error("Wrong values returned")
 	}
 }

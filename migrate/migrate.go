@@ -44,14 +44,14 @@ type Migration struct {
 }
 
 type Migrator struct {
-	conn         *pgx.Connection
+	conn         *pgx.Conn
 	versionTable string
 	Migrations   []*Migration
 	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and SQL
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
-func NewMigrator(conn *pgx.Connection, versionTable string) (m *Migrator, err error) {
+func NewMigrator(conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
 	m = &Migrator{conn: conn, versionTable: versionTable}
 	err = m.ensureSchemaVersionTableExists()
 	m.Migrations = make([]*Migration, 0)
@@ -193,11 +193,11 @@ func (m *Migrator) Migrate() error {
 func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 	// Lock to ensure multiple migrations cannot occur simultaneously
 	lockNum := int64(9628173550095224) // arbitrary random number
-	if _, lockErr := m.conn.Execute("select pg_advisory_lock($1)", lockNum); lockErr != nil {
+	if _, lockErr := m.conn.Exec("select pg_advisory_lock($1)", lockNum); lockErr != nil {
 		return lockErr
 	}
 	defer func() {
-		_, unlockErr := m.conn.Execute("select pg_advisory_unlock($1)", lockNum)
+		_, unlockErr := m.conn.Exec("select pg_advisory_unlock($1)", lockNum)
 		if err == nil && unlockErr != nil {
 			err = unlockErr
 		}
@@ -244,33 +244,32 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 			}
 		}
 
-		var innerErr error
-		_, txErr := m.conn.Transaction(func() bool {
-
-			// Fire on start callback
-			if m.OnStart != nil {
-				m.OnStart(current.Sequence, current.Name, directionName, sql)
-			}
-
-			// Execute the migration
-			if _, innerErr = m.conn.Execute(sql); innerErr != nil {
-				return false
-			}
-
-			// Add one to the version
-			if _, innerErr = m.conn.Execute("update "+m.versionTable+" set version=$1", sequence); innerErr != nil {
-				return false
-			}
-
-			// A migration was completed successfully, return true to commit the transaction
-			return true
-		})
-
-		if txErr != nil {
-			return txErr
+		tx, err := m.conn.Begin()
+		if err != nil {
+			return err
 		}
-		if innerErr != nil {
-			return innerErr
+		defer tx.Rollback()
+
+		// Fire on start callback
+		if m.OnStart != nil {
+			m.OnStart(current.Sequence, current.Name, directionName, sql)
+		}
+
+		// Execute the migration
+		_, err = m.conn.Exec(sql)
+		if err != nil {
+			return err
+		}
+
+		// Add one to the version
+		_, err = m.conn.Exec("update "+m.versionTable+" set version=$1", sequence)
+		if err != nil {
+			return err
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			return err
 		}
 
 		currentVersion = currentVersion + direction
@@ -279,16 +278,13 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 	return nil
 }
 
-func (m *Migrator) GetCurrentVersion() (int32, error) {
-	if v, err := m.conn.SelectValue("select version from " + m.versionTable); err == nil {
-		return v.(int32), nil
-	} else {
-		return 0, err
-	}
+func (m *Migrator) GetCurrentVersion() (v int32, err error) {
+	err = m.conn.QueryRow("select version from " + m.versionTable).Scan(&v)
+	return v, err
 }
 
 func (m *Migrator) ensureSchemaVersionTableExists() (err error) {
-	_, err = m.conn.Execute(`
+	_, err = m.conn.Exec(`
     create table if not exists schema_version(version int4 not null);
 
     insert into schema_version(version)

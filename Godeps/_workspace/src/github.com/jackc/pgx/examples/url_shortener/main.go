@@ -1,25 +1,25 @@
 package main
 
 import (
-	"fmt"
 	"github.com/jackc/pgx"
+	log "gopkg.in/inconshreveable/log15.v2"
 	"io/ioutil"
 	"net/http"
 	"os"
 )
 
-var pool *pgx.ConnectionPool
+var pool *pgx.ConnPool
 
 // afterConnect creates the prepared statements that this application uses
-func afterConnect(conn *pgx.Connection) (err error) {
-	err = conn.Prepare("getUrl", `
+func afterConnect(conn *pgx.Conn) (err error) {
+	_, err = conn.Prepare("getUrl", `
     select url from shortened_urls where id=$1
   `)
 	if err != nil {
 		return
 	}
 
-	err = conn.Prepare("deleteUrl", `
+	_, err = conn.Prepare("deleteUrl", `
     delete from shortened_urls where id=$1
   `)
 	if err != nil {
@@ -30,7 +30,7 @@ func afterConnect(conn *pgx.Connection) (err error) {
 	// where one of two simultaneous requests to the shortened URL would fail
 	// with a unique index violation. As the point of this demo is pgx usage and
 	// not how to perfectly upsert in PostgreSQL it is deemed acceptable.
-	err = conn.Prepare("putUrl", `
+	_, err = conn.Prepare("putUrl", `
     with upsert as (
       update shortened_urls
       set url=$2
@@ -44,11 +44,14 @@ func afterConnect(conn *pgx.Connection) (err error) {
 }
 
 func getUrlHandler(w http.ResponseWriter, req *http.Request) {
-	if url, err := pool.SelectValue("getUrl", req.URL.Path); err == nil {
-		http.Redirect(w, req, url.(string), http.StatusSeeOther)
-	} else if _, ok := err.(pgx.NotSingleRowError); ok {
+	var url string
+	err := pool.QueryRow("getUrl", req.URL.Path).Scan(&url)
+	switch err {
+	case nil:
+		http.Redirect(w, req, url, http.StatusSeeOther)
+	case pgx.ErrNoRows:
 		http.NotFound(w, req)
-	} else {
+	default:
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -63,7 +66,7 @@ func putUrlHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if _, err := pool.Execute("putUrl", id, url); err == nil {
+	if _, err := pool.Exec("putUrl", id, url); err == nil {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -71,7 +74,7 @@ func putUrlHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func deleteUrlHandler(w http.ResponseWriter, req *http.Request) {
-	if _, err := pool.Execute("deleteUrl", req.URL.Path); err == nil {
+	if _, err := pool.Exec("deleteUrl", req.URL.Path); err == nil {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -97,24 +100,29 @@ func urlHandler(w http.ResponseWriter, req *http.Request) {
 
 func main() {
 	var err error
-	connectionOptions := pgx.ConnectionParameters{
-		Host:     "127.0.0.1",
-		User:     "jack",
-		Password: "jack",
-		Database: "url_shortener"}
-	poolOptions := pgx.ConnectionPoolOptions{MaxConnections: 5, AfterConnect: afterConnect}
-	pool, err = pgx.NewConnectionPool(connectionOptions, poolOptions)
+	connPoolConfig := pgx.ConnPoolConfig{
+		ConnConfig: pgx.ConnConfig{
+			Host:     "127.0.0.1",
+			User:     "jack",
+			Password: "jack",
+			Database: "url_shortener",
+			Logger:   log.New("module", "pgx"),
+		},
+		MaxConnections: 5,
+		AfterConnect:   afterConnect,
+	}
+	pool, err = pgx.NewConnPool(connPoolConfig)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to create connection pool: %v\n", err)
+		log.Crit("Unable to create connection pool", "error", err)
 		os.Exit(1)
 	}
 
 	http.HandleFunc("/", urlHandler)
 
-	fmt.Println("Starting URL shortener on localhost:8080...")
+	log.Info("Starting URL shortener on localhost:8080")
 	err = http.ListenAndServe("localhost:8080", nil)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to start web server: %v\n", err)
+		log.Crit("Unable to start web server", "error", err)
 		os.Exit(1)
 	}
 }

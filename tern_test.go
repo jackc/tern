@@ -11,8 +11,8 @@ import (
 )
 
 type TernSuite struct {
-	conn       *pgx.Connection
-	connParams *pgx.ConnectionParameters
+	conn       *pgx.Conn
+	connConfig *pgx.ConnConfig
 }
 
 func Test(t *testing.T) { TestingT(t) }
@@ -23,21 +23,20 @@ func (s *TernSuite) SetUpSuite(c *C) {
 	err := exec.Command("go", "build", "-o", "tmp/tern").Run()
 	c.Assert(err, IsNil)
 
-	s.connParams, err = readConfig("testdata/tern.conf")
+	s.connConfig, err = readConfig("testdata/tern.conf")
 	c.Assert(err, IsNil)
 
-	s.conn, err = pgx.Connect(*s.connParams)
+	s.conn, err = pgx.Connect(*s.connConfig)
 	c.Assert(err, IsNil)
 }
 
-func readConfig(path string) (*pgx.ConnectionParameters, error) {
+func readConfig(path string) (*pgx.ConnConfig, error) {
 	file, err := ini.LoadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	cp := &pgx.ConnectionParameters{}
-	cp.Socket, _ = file.Get("database", "socket")
+	cp := &pgx.ConnConfig{}
 	cp.Host, _ = file.Get("database", "host")
 	if p, ok := file.Get("database", "port"); ok {
 		n, err := strconv.ParseUint(p, 10, 16)
@@ -54,17 +53,15 @@ func readConfig(path string) (*pgx.ConnectionParameters, error) {
 	return cp, nil
 }
 
-func (s *TernSuite) SelectValue(c *C, sql string, arguments ...interface{}) interface{} {
-	value, err := s.conn.SelectValue(sql, arguments...)
-	c.Assert(err, IsNil)
-	return value
-}
-
 func (s *TernSuite) tableExists(c *C, tableName string) bool {
-	return s.SelectValue(c,
+	var exists bool
+	err := s.conn.QueryRow(
 		"select exists(select 1 from information_schema.tables where table_catalog=$1 and table_name=$2)",
-		s.connParams.Database,
-		tableName).(bool)
+		s.connConfig.Database,
+		tableName,
+	).Scan(&exists)
+	c.Assert(err, IsNil)
+	return exists
 }
 
 func (s *TernSuite) tern(c *C, args ...string) {

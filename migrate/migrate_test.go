@@ -9,7 +9,7 @@ import (
 )
 
 type MigrateSuite struct {
-	conn *pgx.Connection
+	conn *pgx.Conn
 }
 
 func Test(t *testing.T) { TestingT(t) }
@@ -26,23 +26,28 @@ func (s *MigrateSuite) SetUpTest(c *C) {
 	s.cleanupSampleMigrator(c)
 }
 
-func (s *MigrateSuite) SelectValue(c *C, sql string, arguments ...interface{}) interface{} {
-	value, err := s.conn.SelectValue(sql, arguments...)
+func (s *MigrateSuite) SelectInt32(c *C, sql string, arguments ...interface{}) int32 {
+	var n int32
+	err := s.conn.QueryRow(sql, arguments...).Scan(&n)
 	c.Assert(err, IsNil)
-	return value
+	return n
 }
 
-func (s *MigrateSuite) Execute(c *C, sql string, arguments ...interface{}) string {
-	commandTag, err := s.conn.Execute(sql, arguments...)
+func (s *MigrateSuite) Exec(c *C, sql string, arguments ...interface{}) pgx.CommandTag {
+	commandTag, err := s.conn.Exec(sql, arguments...)
 	c.Assert(err, IsNil)
 	return commandTag
 }
 
 func (s *MigrateSuite) tableExists(c *C, tableName string) bool {
-	return s.SelectValue(c,
+	var exists bool
+	err := s.conn.QueryRow(
 		"select exists(select 1 from information_schema.tables where table_catalog=$1 and table_name=$2)",
 		defaultConnectionParameters.Database,
-		tableName).(bool)
+		tableName,
+	).Scan(&exists)
+	c.Assert(err, IsNil)
+	return exists
 }
 
 func (s *MigrateSuite) createEmptyMigrator(c *C) *migrate.Migrator {
@@ -63,7 +68,7 @@ func (s *MigrateSuite) createSampleMigrator(c *C) *migrate.Migrator {
 func (s *MigrateSuite) cleanupSampleMigrator(c *C) {
 	tables := []string{versionTable, "t1", "t2", "t3"}
 	for _, table := range tables {
-		s.Execute(c, "drop table if exists "+table)
+		s.Exec(c, "drop table if exists "+table)
 	}
 }
 
@@ -157,7 +162,7 @@ func (s *MigrateSuite) TestMigrate(c *C) {
 
 	err := m.Migrate()
 	c.Assert(err, IsNil)
-	currentVersion := s.SelectValue(c, "select version from schema_version")
+	currentVersion := s.SelectInt32(c, "select version from schema_version")
 	c.Assert(currentVersion, Equals, int32(3))
 }
 
@@ -180,7 +185,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 0 up to 1
 	err := m.MigrateTo(1)
 	c.Assert(err, IsNil)
-	currentVersion := s.SelectValue(c, "select version from schema_version")
+	currentVersion := s.SelectInt32(c, "select version from schema_version")
 	c.Assert(currentVersion, Equals, int32(1))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, false)
@@ -191,7 +196,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 1 up to 3
 	err = m.MigrateTo(3)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectValue(c, "select version from schema_version")
+	currentVersion = s.SelectInt32(c, "select version from schema_version")
 	c.Assert(currentVersion, Equals, int32(3))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, true)
@@ -202,7 +207,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 3 to 3 is no-op
 	err = m.MigrateTo(3)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectValue(c, "select version from schema_version")
+	currentVersion = s.SelectInt32(c, "select version from schema_version")
 	c.Assert(currentVersion, Equals, int32(3))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, true)
@@ -213,7 +218,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 3 down to 1
 	err = m.MigrateTo(1)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectValue(c, "select version from schema_version")
+	currentVersion = s.SelectInt32(c, "select version from schema_version")
 	c.Assert(currentVersion, Equals, int32(1))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, false)
@@ -224,7 +229,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 1 down to 0
 	err = m.MigrateTo(0)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectValue(c, "select version from schema_version")
+	currentVersion = s.SelectInt32(c, "select version from schema_version")
 	c.Assert(currentVersion, Equals, int32(0))
 	c.Assert(s.tableExists(c, "t1"), Equals, false)
 	c.Assert(s.tableExists(c, "t2"), Equals, false)
@@ -235,7 +240,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate back up to 3
 	err = m.MigrateTo(3)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectValue(c, "select version from schema_version")
+	currentVersion = s.SelectInt32(c, "select version from schema_version")
 	c.Assert(currentVersion, Equals, int32(3))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, true)
@@ -256,12 +261,12 @@ func (s *MigrateSuite) TestMigrateToBoundaries(c *C) {
 	c.Assert(err, ErrorMatches, "destination version 4 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
-	s.Execute(c, "update schema_version set version=-1")
+	s.Exec(c, "update schema_version set version=-1")
 	err = m.MigrateTo(int32(1))
 	c.Assert(err, ErrorMatches, "current version -1 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
-	s.Execute(c, "update schema_version set version=4")
+	s.Exec(c, "update schema_version set version=4")
 	err = m.MigrateTo(int32(1))
 	c.Assert(err, ErrorMatches, "current version 4 is outside the valid versions of 0 to 3")
 }
@@ -285,7 +290,7 @@ func Example_OnStartMigrationProgressLogging() {
 	}
 
 	// Clear any previous runs
-	if _, err = conn.Execute("drop table if exists schema_version"); err != nil {
+	if _, err = conn.Exec("drop table if exists schema_version"); err != nil {
 		fmt.Printf("Unable to drop schema_version table: %v", err)
 		return
 	}

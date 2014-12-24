@@ -16,8 +16,7 @@ import (
 const VERSION = "1.2.2"
 
 var defaultConf = `[database]
-# socket or host is required
-# socket =
+# host is required (network host or path to Unix domain socket)
 # host =
 # port = 5432
 # database is required
@@ -53,17 +52,17 @@ var newMigrationText = `-- Write your migrate up statements here
 `
 
 type Config struct {
-	ConnectionParameters pgx.ConnectionParameters
-	VersionTable         string
-	Data                 map[string]interface{}
+	ConnConfig   pgx.ConnConfig
+	VersionTable string
+	Data         map[string]interface{}
 }
 
 func (c *Config) Validate() error {
-	if c.ConnectionParameters.Host == "" && c.ConnectionParameters.Socket == "" {
-		return errors.New("Config must contain host or socket but it does not")
+	if c.ConnConfig.Host == "" {
+		return errors.New("Config must contain host but it does not")
 	}
 
-	if c.ConnectionParameters.Database == "" {
+	if c.ConnConfig.Database == "" {
 		return errors.New("Config must contain database but it does not")
 	}
 
@@ -211,8 +210,8 @@ func Migrate(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	var conn *pgx.Connection
-	conn, err = pgx.Connect(config.ConnectionParameters)
+	var conn *pgx.Conn
+	conn, err = pgx.Connect(config.ConnConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
 		os.Exit(1)
@@ -269,19 +268,24 @@ func ReadConfig(path string) (*Config, error) {
 
 	config := &Config{VersionTable: "schema_version"}
 
-	config.ConnectionParameters.Socket, _ = file.Get("database", "socket")
-	config.ConnectionParameters.Host, _ = file.Get("database", "host")
+	config.ConnConfig.Host, _ = file.Get("database", "host")
+
+	// For backwards compatibility if host isn't set look for socket.
+	if config.ConnConfig.Host == "" {
+		config.ConnConfig.Host, _ = file.Get("database", "socket")
+	}
+
 	if p, ok := file.Get("database", "port"); ok {
 		n, err := strconv.ParseUint(p, 10, 16)
-		config.ConnectionParameters.Port = uint16(n)
+		config.ConnConfig.Port = uint16(n)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	config.ConnectionParameters.Database, _ = file.Get("database", "database")
-	config.ConnectionParameters.User, _ = file.Get("database", "user")
-	config.ConnectionParameters.Password, _ = file.Get("database", "password")
+	config.ConnConfig.Database, _ = file.Get("database", "database")
+	config.ConnConfig.User, _ = file.Get("database", "user")
+	config.ConnConfig.Password, _ = file.Get("database", "password")
 
 	if vt, ok := file.Get("database", "version_table"); ok {
 		config.VersionTable = vt
