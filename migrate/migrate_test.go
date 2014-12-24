@@ -16,7 +16,7 @@ func Test(t *testing.T) { TestingT(t) }
 
 var _ = Suite(&MigrateSuite{})
 
-var versionTable string = "schema_version"
+var versionTable string = "schema_version_non_default"
 
 func (s *MigrateSuite) SetUpTest(c *C) {
 	var err error
@@ -26,9 +26,9 @@ func (s *MigrateSuite) SetUpTest(c *C) {
 	s.cleanupSampleMigrator(c)
 }
 
-func (s *MigrateSuite) SelectInt32(c *C, sql string, arguments ...interface{}) int32 {
+func (s *MigrateSuite) currentVersion(c *C) int32 {
 	var n int32
-	err := s.conn.QueryRow(sql, arguments...).Scan(&n)
+	err := s.conn.QueryRow("select version from " + versionTable).Scan(&n)
 	c.Assert(err, IsNil)
 	return n
 }
@@ -162,7 +162,7 @@ func (s *MigrateSuite) TestMigrate(c *C) {
 
 	err := m.Migrate()
 	c.Assert(err, IsNil)
-	currentVersion := s.SelectInt32(c, "select version from schema_version")
+	currentVersion := s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(3))
 }
 
@@ -185,7 +185,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 0 up to 1
 	err := m.MigrateTo(1)
 	c.Assert(err, IsNil)
-	currentVersion := s.SelectInt32(c, "select version from schema_version")
+	currentVersion := s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(1))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, false)
@@ -196,7 +196,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 1 up to 3
 	err = m.MigrateTo(3)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectInt32(c, "select version from schema_version")
+	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(3))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, true)
@@ -207,8 +207,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 3 to 3 is no-op
 	err = m.MigrateTo(3)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectInt32(c, "select version from schema_version")
-	c.Assert(currentVersion, Equals, int32(3))
+	currentVersion = s.currentVersion(c)
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, true)
 	c.Assert(s.tableExists(c, "t3"), Equals, true)
@@ -218,7 +217,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 3 down to 1
 	err = m.MigrateTo(1)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectInt32(c, "select version from schema_version")
+	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(1))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, false)
@@ -229,7 +228,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate from 1 down to 0
 	err = m.MigrateTo(0)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectInt32(c, "select version from schema_version")
+	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(0))
 	c.Assert(s.tableExists(c, "t1"), Equals, false)
 	c.Assert(s.tableExists(c, "t2"), Equals, false)
@@ -240,7 +239,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	// Migrate back up to 3
 	err = m.MigrateTo(3)
 	c.Assert(err, IsNil)
-	currentVersion = s.SelectInt32(c, "select version from schema_version")
+	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(3))
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
 	c.Assert(s.tableExists(c, "t2"), Equals, true)
@@ -261,12 +260,12 @@ func (s *MigrateSuite) TestMigrateToBoundaries(c *C) {
 	c.Assert(err, ErrorMatches, "destination version 4 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
-	s.Exec(c, "update schema_version set version=-1")
+	s.Exec(c, "update "+versionTable+" set version=-1")
 	err = m.MigrateTo(int32(1))
 	c.Assert(err, ErrorMatches, "current version -1 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
-	s.Exec(c, "update schema_version set version=4")
+	s.Exec(c, "update "+versionTable+" set version=4")
 	err = m.MigrateTo(int32(1))
 	c.Assert(err, ErrorMatches, "current version 4 is outside the valid versions of 0 to 3")
 }

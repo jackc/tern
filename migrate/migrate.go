@@ -284,12 +284,12 @@ func (m *Migrator) GetCurrentVersion() (v int32, err error) {
 }
 
 func (m *Migrator) ensureSchemaVersionTableExists() (err error) {
-	_, err = m.conn.Exec(`
-    create table if not exists schema_version(version int4 not null);
+	_, err = m.conn.Exec(fmt.Sprintf(`
+    create table if not exists %s(version int4 not null);
 
-    insert into schema_version(version)
+    insert into %s(version)
     select 0
-    where 0=(select count(*) from schema_version);
-  `)
-	return
+    where 0=(select count(*) from %s);
+  `, m.versionTable, m.versionTable, m.versionTable))
+	return err
 }
