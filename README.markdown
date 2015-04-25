@@ -149,6 +149,22 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.3.1 (December 24, 2014)
+
+* Fix custom version table name
+
+## 1.3.0 (December 23, 2014)
+
+* Prefer host config whether connecting with unix domain socket or TCP
+
+## 1.2.2 (May 30, 2014)
+
+* Fix new migration short name
+
+## 1.2.1 (May 18, 2014)
+
+* Support socket directory as well as socket file
+
 ## 1.2.0 (May 6, 2014)
 
 * Move to subcommand interface
