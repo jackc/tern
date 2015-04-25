@@ -25,8 +25,9 @@ current OS user.
 
 ```ini
 [database]
-socket = /private/tmp/.s.PGSQL.5432
-# host = 127.0.0.1
+# host supports TCP addresses and Unix domain sockets
+# host = /private/tmp
+host = 127.0.0.1
 # port = 5432
 database = tern_test
 user = jack
