@@ -36,6 +36,11 @@ func (e NoMigrationsFoundError) Error() string {
 	return fmt.Sprintf("No migrations found at %s", e.Path)
 }
 
+type MigrationSyntaxError struct {
+	Sql string
+	pgx.PgError
+}
+
 type Migration struct {
 	Sequence int32
 	Name     string
@@ -258,6 +263,9 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 		// Execute the migration
 		_, err = m.conn.Exec(sql)
 		if err != nil {
+			if err, ok := err.(pgx.PgError); ok && err.Position != 0 {
+				return MigrationSyntaxError{Sql: sql, PgError: err}
+			}
 			return err
 		}
 
