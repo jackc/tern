@@ -150,6 +150,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.3.3 (May 1, 2015)
+
+* Fix version output
+
 ## 1.3.2 (May 1, 2015)
 
 * Better error messages
