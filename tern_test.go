@@ -1,33 +1,23 @@
 package main_test
 
 import (
+	"fmt"
 	"github.com/jackc/pgx"
 	"github.com/vaughan0/go-ini"
-	. "gopkg.in/check.v1"
 	"os"
 	"os/exec"
 	"strconv"
 	"testing"
 )
 
-type TernSuite struct {
-	conn       *pgx.Conn
-	connConfig *pgx.ConnConfig
-}
-
-func Test(t *testing.T) { TestingT(t) }
-
-var _ = Suite(&TernSuite{})
-
-func (s *TernSuite) SetUpSuite(c *C) {
+func TestMain(m *testing.M) {
 	err := exec.Command("go", "build", "-o", "tmp/tern").Run()
-	c.Assert(err, IsNil)
+	if err != nil {
+		fmt.Println("Failed to build tern binary:", err)
+		os.Exit(1)
+	}
 
-	s.connConfig, err = readConfig("testdata/tern.conf")
-	c.Assert(err, IsNil)
-
-	s.conn, err = pgx.Connect(*s.connConfig)
-	c.Assert(err, IsNil)
+	os.Exit(m.Run())
 }
 
 func readConfig(path string) (*pgx.ConnConfig, error) {
@@ -53,85 +43,116 @@ func readConfig(path string) (*pgx.ConnConfig, error) {
 	return cp, nil
 }
 
-func (s *TernSuite) tableExists(c *C, tableName string) bool {
+func tableExists(t *testing.T, tableName string) bool {
+	connConfig, err := readConfig("testdata/tern.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := pgx.Connect(*connConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
 	var exists bool
-	err := s.conn.QueryRow(
+	err = conn.QueryRow(
 		"select exists(select 1 from information_schema.tables where table_catalog=$1 and table_name=$2)",
-		s.connConfig.Database,
+		connConfig.Database,
 		tableName,
 	).Scan(&exists)
-	c.Assert(err, IsNil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	return exists
 }
 
-func (s *TernSuite) tern(c *C, args ...string) {
+func tern(t *testing.T, args ...string) {
 	cmd := exec.Command("tmp/tern", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		c.Fatalf("tern failed with: %v\noutput:\n%v", err, string(output))
+		t.Fatalf("tern failed with: %v\noutput:\n%v", err, string(output))
 	}
 }
 
-func (s *TernSuite) TestInitWithoutDirectory(c *C) {
+func TestInitWithoutDirectory(t *testing.T) {
 	defer func() {
 		os.Remove("tern.conf")
 		os.Remove("001_create_people.sql.example")
 	}()
 
-	s.tern(c, "init")
+	tern(t, "init")
 
-	_, err := os.Stat("tern.conf")
-	c.Assert(err, IsNil)
-
-	_, err = os.Stat("001_create_people.sql.example")
-	c.Assert(err, IsNil)
+	expectedFiles := []string{"tern.conf", "001_create_people.sql.example"}
+	for _, f := range expectedFiles {
+		_, err := os.Stat(f)
+		if err != nil {
+			t.Errorf(`Expected init to create "%s", but it didn't: %v`, f, err)
+		}
+	}
 }
 
-func (s *TernSuite) TestInitWithDirectory(c *C) {
+func TestInitWithDirectory(t *testing.T) {
 	defer func() {
 		os.RemoveAll("tmp/init")
 	}()
 
-	s.tern(c, "init", "tmp/init")
+	tern(t, "init", "tmp/init")
 
-	_, err := os.Stat("tmp/init/tern.conf")
-	c.Assert(err, IsNil)
-
-	_, err = os.Stat("tmp/init/001_create_people.sql.example")
-	c.Assert(err, IsNil)
+	expectedFiles := []string{"tmp/init/tern.conf", "tmp/init/001_create_people.sql.example"}
+	for _, f := range expectedFiles {
+		_, err := os.Stat(f)
+		if err != nil {
+			t.Errorf(`Expected init to create "%s", but it didn't: %v`, f, err)
+		}
+	}
 }
 
-func (s *TernSuite) TestNew(c *C) {
+func TestNew(t *testing.T) {
 	path := "tmp/new"
 	defer func() {
 		os.RemoveAll(path)
 	}()
 
-	s.tern(c, "init", path)
-	s.tern(c, "new", "-m", path, "first")
+	tern(t, "init", path)
+	tern(t, "new", "-m", path, "first")
+	tern(t, "new", "-m", path, "second")
 
-	_, err := os.Stat("tmp/new/001_first.sql")
-	c.Assert(err, IsNil)
-
-	s.tern(c, "new", "-m", path, "second")
-
-	_, err = os.Stat("tmp/new/002_second.sql")
-	c.Assert(err, IsNil)
+	expectedFiles := []string{"tmp/new/001_first.sql", "tmp/new/002_second.sql"}
+	for _, f := range expectedFiles {
+		_, err := os.Stat(f)
+		if err != nil {
+			t.Errorf(`Expected init to create "%s", but it didn't: %v`, f, err)
+		}
+	}
 }
 
-func (s *TernSuite) TestMigrate(c *C) {
+func TestMigrate(t *testing.T) {
 	// Ensure database is in clean state
-	s.tern(c, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
-	c.Assert(s.tableExists(c, "t1"), Equals, false)
-	c.Assert(s.tableExists(c, "t2"), Equals, false)
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	if tableExists(t, "t1") {
+		t.Fatal(`Did not expect table "t1" to exist`)
+	}
+	if tableExists(t, "t2") {
+		t.Fatal(`Did not expect table "t2" to exist`)
+	}
 
 	// Up all the way
-	s.tern(c, "migrate", "-m", "testdata", "-c", "testdata/tern.conf")
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-	c.Assert(s.tableExists(c, "t2"), Equals, true)
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf")
+	if !tableExists(t, "t1") {
+		t.Fatal(`Expected table "t1" to exist`)
+	}
+	if !tableExists(t, "t2") {
+		t.Fatal(`Expected table "t2" to exist`)
+	}
 
 	// Back one
-	s.tern(c, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "1")
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-	c.Assert(s.tableExists(c, "t2"), Equals, false)
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "1")
+	if !tableExists(t, "t1") {
+		t.Fatal(`Expected table "t1" to exist`)
+	}
+	if tableExists(t, "t2") {
+		t.Fatal(`Did not expect table "t2" to exist`)
+	}
 }
