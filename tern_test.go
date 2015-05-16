@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"crypto/tls"
 	"fmt"
 	"github.com/jackc/pgx"
 	"github.com/vaughan0/go-ini"
@@ -49,7 +50,13 @@ func tableExists(t *testing.T, tableName string) bool {
 		t.Fatal(err)
 	}
 
+	connConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+
 	conn, err := pgx.Connect(*connConfig)
+	if err != nil {
+		connConfig.TLSConfig = nil
+		conn, err = pgx.Connect(*connConfig)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

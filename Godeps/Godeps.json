@@ -9,16 +9,12 @@
 		},
 		{
 			"ImportPath": "github.com/jackc/pgx",
-			"Comment": "v2.5.0-2-g5bb7f64",
-			"Rev": "5bb7f64dac0d1c599a01218a69c51941eb0891fc"
+			"Comment": "v2.5.0-3-g0c0a426",
+			"Rev": "0c0a426d18e3d1e135de5c86be81b3f73abf208c"
 		},
 		{
 			"ImportPath": "github.com/vaughan0/go-ini",
 			"Rev": "a98ad7ee00ec53921f08832bc06ecf7fd600e6a1"
-		},
-		{
-			"ImportPath": "gopkg.in/check.v1",
-			"Rev": "871360013c92e1c715c2de6d06b54899468a8a2d"
 		}
 	]
 }

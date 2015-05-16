@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"github.com/jackc/cli"
@@ -14,7 +15,7 @@ import (
 	"time"
 )
 
-const VERSION = "1.3.3"
+const VERSION = "1.4.0"
 
 var defaultConf = `[database]
 # host is required (network host or path to Unix domain socket)
@@ -25,6 +26,14 @@ var defaultConf = `[database]
 # user defaults to OS user
 # user =
 # version_table = schema_version
+#
+# sslmode generally matches the behavior described in:
+# http://www.postgresql.org/docs/9.4/static/libpq-ssl.html#LIBPQ-SSL-PROTECTION
+#
+# There are only two modes that most users should use:
+# prefer - on trusted networks where security is not required
+# verify-full - require SSL connection
+# sslmode = prefer
 
 [data]
 # Any fields in the data section are available in migration templates
@@ -54,6 +63,7 @@ var newMigrationText = `-- Write your migrate up statements here
 
 type Config struct {
 	ConnConfig   pgx.ConnConfig
+	SslMode      string
 	VersionTable string
 	Data         map[string]interface{}
 }
@@ -67,7 +77,34 @@ func (c *Config) Validate() error {
 		return errors.New("Config must contain database but it does not")
 	}
 
+	switch c.SslMode {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+		// okay
+	default:
+		return errors.New("sslmode is invalid")
+	}
+
 	return nil
+}
+
+func (c *Config) Connect() (*pgx.Conn, error) {
+	switch c.SslMode {
+	case "prefer", "require":
+		c.ConnConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+	case "verify-ca", "verify-full":
+		c.ConnConfig.TLSConfig = &tls.Config{ServerName: c.ConnConfig.Host}
+	}
+
+	conn, err := pgx.Connect(c.ConnConfig)
+	if err == pgx.ErrTLSRefused && c.SslMode == "prefer" {
+		c.ConnConfig.TLSConfig = nil
+		conn, err = pgx.Connect(c.ConnConfig)
+	} else if pgErr, ok := err.(pgx.PgError); ok && pgErr.Code == "28000" && c.SslMode == "allow" {
+		c.ConnConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+		conn, err = pgx.Connect(c.ConnConfig)
+	}
+
+	return conn, err
 }
 
 func main() {
@@ -211,8 +248,7 @@ func Migrate(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	var conn *pgx.Conn
-	conn, err = pgx.Connect(config.ConnConfig)
+	conn, err := config.Connect()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
 		os.Exit(1)
@@ -304,6 +340,12 @@ func ReadConfig(path string) (*Config, error) {
 
 	if vt, ok := file.Get("database", "version_table"); ok {
 		config.VersionTable = vt
+	}
+
+	if sslmode, ok := file.Get("database", "sslmode"); ok {
+		config.SslMode = sslmode
+	} else {
+		config.SslMode = "prefer"
 	}
 
 	config.Data = make(map[string]interface{})

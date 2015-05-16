@@ -33,6 +33,15 @@ database = tern_test
 user = jack
 # password = secret
 # version_table = schema_version
+#
+# sslmode generally matches the behavior described in:
+# http://www.postgresql.org/docs/9.4/static/libpq-ssl.html#LIBPQ-SSL-PROTECTION
+#
+# There are only two modes that most users should use:
+# prefer - on trusted networks where security is not required
+# verify-full - require SSL connection
+# sslmode = prefer
+
 
 [data]
 prefix = foo
@@ -149,6 +158,10 @@ Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
+
+## 1.4.0 (May 15, 2015)
+
+* Add TLS support
 
 ## 1.3.3 (May 1, 2015)
 
