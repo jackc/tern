@@ -89,22 +89,21 @@ func (c *Config) Validate() error {
 
 func (c *Config) Connect() (*pgx.Conn, error) {
 	switch c.SslMode {
-	case "prefer", "require":
+	case "disable":
+	case "allow":
+		c.ConnConfig.UseFallbackTLS = true
+		c.ConnConfig.FallbackTLSConfig = &tls.Config{InsecureSkipVerify: true}
+	case "prefer":
 		c.ConnConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-	case "verify-ca", "verify-full":
-		c.ConnConfig.TLSConfig = &tls.Config{ServerName: c.ConnConfig.Host}
+		c.ConnConfig.UseFallbackTLS = true
+		c.ConnConfig.FallbackTLSConfig = nil
+	case "require", "verify-ca", "verify-full":
+		c.ConnConfig.TLSConfig = &tls.Config{
+			ServerName: c.ConnConfig.Host,
+		}
 	}
 
-	conn, err := pgx.Connect(c.ConnConfig)
-	if err == pgx.ErrTLSRefused && c.SslMode == "prefer" {
-		c.ConnConfig.TLSConfig = nil
-		conn, err = pgx.Connect(c.ConnConfig)
-	} else if pgErr, ok := err.(pgx.PgError); ok && pgErr.Code == "28000" && c.SslMode == "allow" {
-		c.ConnConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-		conn, err = pgx.Connect(c.ConnConfig)
-	}
-
-	return conn, err
+	return pgx.Connect(c.ConnConfig)
 }
 
 func main() {

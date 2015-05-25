@@ -15,6 +15,7 @@ var tlsConnConfig *pgx.ConnConfig = &pgx.ConnConfig{Host: "127.0.0.1", User: "pg
 var plainPasswordConnConfig *pgx.ConnConfig = &pgx.ConnConfig{Host: "/var/run/postgresql", User: "pgx_pw", Password: "secret", Database: "pgx_test"}
 var noPasswordConnConfig *pgx.ConnConfig = &pgx.ConnConfig{Host: "/var/run/postgresql", User: "pgx_none", Database: "pgx_test"}
 var invalidUserConnConfig *pgx.ConnConfig = &pgx.ConnConfig{Host: "/var/run/postgresql", User: "invalid", Database: "pgx_test"}
+var customDialerConnConfig = &pgx.ConnConfig{Host: "127.0.0.1", User: "pgx_md5", Password: "secret", Database: "pgx_test"}
 
 // var tcpConnConfig *pgx.ConnConfig = &pgx.ConnConfig{Host: "127.0.0.1", User: "pgx_md5", Password: "secret", Database: "pgx_test"}
 // var unixSocketConnConfig *pgx.ConnConfig = &pgx.ConnConfig{Host: "/private/tmp/.s.PGSQL.5432", User: "pgx_none", Database: "pgx_test"}

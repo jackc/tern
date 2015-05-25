@@ -9,8 +9,8 @@
 		},
 		{
 			"ImportPath": "github.com/jackc/pgx",
-			"Comment": "v2.5.0-3-g0c0a426",
-			"Rev": "0c0a426d18e3d1e135de5c86be81b3f73abf208c"
+			"Comment": "v2.5.0-7-gdb53003",
+			"Rev": "db5300358a14c176a55627536da74d077aff92ae"
 		},
 		{
 			"ImportPath": "github.com/vaughan0/go-ini",
