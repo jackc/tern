@@ -4,15 +4,16 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/jackc/cli"
-	"github.com/jackc/pgx"
-	"github.com/jackc/tern/migrate"
-	"github.com/vaughan0/go-ini"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx"
+	"github.com/jackc/tern/migrate"
+	"github.com/spf13/cobra"
+	"github.com/vaughan0/go-ini"
 )
 
 const VERSION = "1.4.0"
@@ -68,6 +69,12 @@ type Config struct {
 	Data         map[string]interface{}
 }
 
+var cliOptions struct {
+	destinationVersion string
+	migrationsPath     string
+	configPath         string
+}
+
 func (c *Config) Validate() error {
 	if c.ConnConfig.Host == "" {
 		return errors.New("Config must contain host but it does not")
@@ -107,65 +114,61 @@ func (c *Config) Connect() (*pgx.Conn, error) {
 }
 
 func main() {
-	app := cli.NewApp()
-	app.Name = "tern"
-	app.Usage = "PostgreSQL database migrator"
-	app.Version = VERSION
-	app.Author = "Jack Christensen"
-	app.Email = "jack@jackchristensen.com"
+	cmdInit := &cobra.Command{
+		Use:   "init DIRECTORY",
+		Short: "initialize a new tern project",
+		Long:  "Initialize a new tern project in DIRECTORY",
+		Run:   Init,
+	}
 
-	app.Commands = []cli.Command{
-		{
-			Name:        "init",
-			ShortName:   "i",
-			Usage:       "init a new tern project",
-			Synopsis:    "[directory]",
-			Description: "Initialize a new tern project in directory",
-			Action:      Init,
-		},
-		{
-			Name:        "migrate",
-			ShortName:   "m",
-			Usage:       "migrate the database",
-			Synopsis:    "[command options]",
-			Description: "migrate the database to destination version",
-			Flags: []cli.Flag{
-				cli.StringFlag{"destination, d", "last", "Destination migration version"},
-				cli.StringFlag{"migrations, m", ".", "Migrations path"},
-				cli.StringFlag{"config, c", "tern.conf", "Config path"},
-			},
-			Action: Migrate,
-		},
-		{
-			Name:        "new",
-			ShortName:   "n",
-			Usage:       "generate a new migration",
-			Synopsis:    "[command options] name",
-			Description: "generate a new migration with the next sequence number and provided name",
-			Flags: []cli.Flag{
-				cli.StringFlag{"migrations, m", ".", "Migrations path"},
-			},
-			Action: NewMigration,
+	cmdMigrate := &cobra.Command{
+		Use:   "migrate",
+		Short: "migrate the database",
+		Long:  "generate a new migration with the next sequence number and provided name",
+		Run:   Migrate,
+	}
+	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
+	cmdMigrate.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdMigrate.Flags().StringVarP(&cliOptions.configPath, "config", "c", "tern.conf", "config path")
+
+	cmdNew := &cobra.Command{
+		Use:   "new NAME",
+		Short: "generate a new migration",
+		Long:  "generate a new migration with the next sequence number and provided name",
+		Run:   NewMigration,
+	}
+	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+
+	cmdVersion := &cobra.Command{
+		Use:   "version",
+		Short: "Print version",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("tern v%s\n", VERSION)
 		},
 	}
 
-	app.Run(os.Args)
+	rootCmd := &cobra.Command{Use: "tern", Short: "tern - PostgreSQL database migrator"}
+	rootCmd.AddCommand(cmdInit)
+	rootCmd.AddCommand(cmdMigrate)
+	rootCmd.AddCommand(cmdNew)
+	rootCmd.AddCommand(cmdVersion)
+	rootCmd.Execute()
 }
 
-func Init(c *cli.Context) {
+func Init(cmd *cobra.Command, args []string) {
 	var directory string
-	switch len(c.Args()) {
+	switch len(args) {
 	case 0:
 		directory = "."
 	case 1:
-		directory = c.Args()[0]
+		directory = args[0]
 		err := os.Mkdir(directory, os.ModePerm)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	default:
-		cli.ShowCommandHelp(c, c.Command.Name)
+		cmd.Help()
 		os.Exit(1)
 	}
 
@@ -200,15 +203,15 @@ func Init(c *cli.Context) {
 	}
 }
 
-func NewMigration(c *cli.Context) {
-	if len(c.Args()) != 1 {
-		cli.ShowCommandHelp(c, c.Command.Name)
+func NewMigration(cmd *cobra.Command, args []string) {
+	if len(args) != 1 {
+		cmd.Help()
 		os.Exit(1)
 	}
 
-	name := c.Args()[0]
+	name := args[0]
 
-	migrationsPath := c.String("migrations")
+	migrationsPath := cliOptions.migrationsPath
 	migrations, err := migrate.FindMigrations(migrationsPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
@@ -234,8 +237,8 @@ func NewMigration(c *cli.Context) {
 
 }
 
-func Migrate(c *cli.Context) {
-	config, err := ReadConfig(c.String("config"))
+func Migrate(cmd *cobra.Command, args []string) {
+	config, err := ReadConfig(cliOptions.configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading config:\n  %v\n", err)
 		os.Exit(1)
@@ -261,7 +264,7 @@ func Migrate(c *cli.Context) {
 	}
 	migrator.Data = config.Data
 
-	migrationsPath := c.String("migrations")
+	migrationsPath := cliOptions.migrationsPath
 	err = migrator.LoadMigrations(migrationsPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
@@ -276,7 +279,7 @@ func Migrate(c *cli.Context) {
 		fmt.Printf("%s executing %s %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), name, direction, sql)
 	}
 
-	destination := c.String("destination")
+	destination := cliOptions.destinationVersion
 	if destination == "last" {
 		err = migrator.Migrate()
 	} else {

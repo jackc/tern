@@ -230,6 +230,37 @@ func TestConnQueryScanner(t *testing.T) {
 	ensureConnValid(t, conn)
 }
 
+func TestConnQueryErrorWhileReturningRows(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	for i := 0; i < 100; i++ {
+		func() {
+			sql := `select 42 / (random() * 20)::integer from generate_series(1,100000)`
+
+			rows, err := conn.Query(sql)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+
+			for rows.Next() {
+				var n int32
+				rows.Scan(&n)
+			}
+
+			if err, ok := rows.Err().(pgx.PgError); !ok {
+				t.Fatalf("Expected pgx.PgError, got %v", err)
+			}
+
+			ensureConnValid(t, conn)
+		}()
+	}
+
+}
+
 func TestConnQueryEncoder(t *testing.T) {
 	t.Parallel()
 
@@ -422,8 +453,8 @@ func TestQueryRowUnknownType(t *testing.T) {
 	conn := mustConnect(t, *defaultConnConfig)
 	defer closeConn(t, conn)
 
-	sql := "select $1::inet"
-	expected := "127.0.0.1"
+	sql := "select $1::point"
+	expected := "(1,0)"
 	var actual string
 
 	err := conn.QueryRow(sql, expected).Scan(&actual)
@@ -488,19 +519,13 @@ func TestQueryRowNoResults(t *testing.T) {
 	conn := mustConnect(t, *defaultConnConfig)
 	defer closeConn(t, conn)
 
-	sql := "select 1 where 1=0"
-	psName := "selectNothing"
-	mustPrepare(t, conn, psName, sql)
-
-	for _, sql := range []string{sql, psName} {
-		var n int32
-		err := conn.QueryRow(sql).Scan(&n)
-		if err != pgx.ErrNoRows {
-			t.Errorf("Expected pgx.ErrNoRows, got %v", err)
-		}
-
-		ensureConnValid(t, conn)
+	var n int32
+	err := conn.QueryRow("select 1 where 1=0").Scan(&n)
+	if err != pgx.ErrNoRows {
+		t.Errorf("Expected pgx.ErrNoRows, got %v", err)
 	}
+
+	ensureConnValid(t, conn)
 }
 
 func TestQueryRowCoreInt16Slice(t *testing.T) {

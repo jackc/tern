@@ -3,7 +3,6 @@ package pgx_test
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/jackc/pgx"
 	"net"
 	"os"
 	"reflect"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx"
 )
 
 func TestConnect(t *testing.T) {
@@ -63,7 +64,7 @@ func TestConnectWithUnixSocketDirectory(t *testing.T) {
 
 	// /.s.PGSQL.5432
 	if unixSocketConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined unixSocketConnConfig")
 	}
 
 	conn, err := pgx.Connect(*unixSocketConnConfig)
@@ -81,7 +82,7 @@ func TestConnectWithUnixSocketFile(t *testing.T) {
 	t.Parallel()
 
 	if unixSocketConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined unixSocketConnConfig")
 	}
 
 	connParams := *unixSocketConnConfig
@@ -101,7 +102,7 @@ func TestConnectWithTcp(t *testing.T) {
 	t.Parallel()
 
 	if tcpConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined tcpConnConfig")
 	}
 
 	conn, err := pgx.Connect(*tcpConnConfig)
@@ -119,7 +120,7 @@ func TestConnectWithTLS(t *testing.T) {
 	t.Parallel()
 
 	if tlsConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined tlsConnConfig")
 	}
 
 	conn, err := pgx.Connect(*tlsConnConfig)
@@ -137,7 +138,7 @@ func TestConnectWithInvalidUser(t *testing.T) {
 	t.Parallel()
 
 	if invalidUserConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined invalidUserConnConfig")
 	}
 
 	_, err := pgx.Connect(*invalidUserConnConfig)
@@ -154,7 +155,7 @@ func TestConnectWithPlainTextPassword(t *testing.T) {
 	t.Parallel()
 
 	if plainPasswordConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined plainPasswordConnConfig")
 	}
 
 	conn, err := pgx.Connect(*plainPasswordConnConfig)
@@ -172,7 +173,7 @@ func TestConnectWithMD5Password(t *testing.T) {
 	t.Parallel()
 
 	if md5ConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined md5ConnConfig")
 	}
 
 	conn, err := pgx.Connect(*md5ConnConfig)
@@ -190,7 +191,7 @@ func TestConnectWithTLSFallback(t *testing.T) {
 	t.Parallel()
 
 	if tlsConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined tlsConnConfig")
 	}
 
 	connConfig := *tlsConnConfig
@@ -233,7 +234,7 @@ func TestConnectCustomDialer(t *testing.T) {
 	t.Parallel()
 
 	if customDialerConnConfig == nil {
-		return
+		t.Skip("Skipping due to undefined customDialerConnConfig")
 	}
 
 	dialled := false
@@ -265,6 +266,34 @@ func TestParseURI(t *testing.T) {
 		connParams pgx.ConnConfig
 	}{
 		{
+			url: "postgres://jack:secret@localhost:5432/mydb?sslmode=prefer",
+			connParams: pgx.ConnConfig{
+				User:     "jack",
+				Password: "secret",
+				Host:     "localhost",
+				Port:     5432,
+				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
+			},
+		},
+		{
+			url: "postgres://jack:secret@localhost:5432/mydb?sslmode=disable",
+			connParams: pgx.ConnConfig{
+				User:              "jack",
+				Password:          "secret",
+				Host:              "localhost",
+				Port:              5432,
+				Database:          "mydb",
+				TLSConfig:         nil,
+				UseFallbackTLS:    false,
+				FallbackTLSConfig: nil,
+			},
+		},
+		{
 			url: "postgres://jack:secret@localhost:5432/mydb",
 			connParams: pgx.ConnConfig{
 				User:     "jack",
@@ -272,6 +301,11 @@ func TestParseURI(t *testing.T) {
 				Host:     "localhost",
 				Port:     5432,
 				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
 			},
 		},
 		{
@@ -282,6 +316,11 @@ func TestParseURI(t *testing.T) {
 				Host:     "localhost",
 				Port:     5432,
 				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
 			},
 		},
 		{
@@ -291,6 +330,11 @@ func TestParseURI(t *testing.T) {
 				Host:     "localhost",
 				Port:     5432,
 				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
 			},
 		},
 		{
@@ -299,6 +343,11 @@ func TestParseURI(t *testing.T) {
 				User:     "jack",
 				Host:     "localhost",
 				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
 			},
 		},
 	}
@@ -324,7 +373,7 @@ func TestParseDSN(t *testing.T) {
 		connParams pgx.ConnConfig
 	}{
 		{
-			url: "user=jack password=secret host=localhost port=5432 dbname=mydb",
+			url: "user=jack password=secret host=localhost port=5432 dbname=mydb sslmode=disable",
 			connParams: pgx.ConnConfig{
 				User:     "jack",
 				Password: "secret",
@@ -334,12 +383,47 @@ func TestParseDSN(t *testing.T) {
 			},
 		},
 		{
+			url: "user=jack password=secret host=localhost port=5432 dbname=mydb sslmode=prefer",
+			connParams: pgx.ConnConfig{
+				User:     "jack",
+				Password: "secret",
+				Host:     "localhost",
+				Port:     5432,
+				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
+			},
+		},
+		{
+			url: "user=jack password=secret host=localhost port=5432 dbname=mydb",
+			connParams: pgx.ConnConfig{
+				User:     "jack",
+				Password: "secret",
+				Host:     "localhost",
+				Port:     5432,
+				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
+			},
+		},
+		{
 			url: "user=jack host=localhost port=5432 dbname=mydb",
 			connParams: pgx.ConnConfig{
 				User:     "jack",
 				Host:     "localhost",
 				Port:     5432,
 				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
 			},
 		},
 		{
@@ -348,6 +432,11 @@ func TestParseDSN(t *testing.T) {
 				User:     "jack",
 				Host:     "localhost",
 				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
 			},
 		},
 	}
@@ -818,6 +907,151 @@ func TestListenNotify(t *testing.T) {
 	}
 }
 
+func TestUnlistenSpecificChannel(t *testing.T) {
+	t.Parallel()
+
+	listener := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, listener)
+
+	if err := listener.Listen("unlisten_test"); err != nil {
+		t.Fatalf("Unable to start listening: %v", err)
+	}
+
+	notifier := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, notifier)
+
+	mustExec(t, notifier, "notify unlisten_test")
+
+	// when notification is waiting on the socket to be read
+	notification, err := listener.WaitForNotification(time.Second)
+	if err != nil {
+		t.Fatalf("Unexpected error on WaitForNotification: %v", err)
+	}
+	if notification.Channel != "unlisten_test" {
+		t.Errorf("Did not receive notification on expected channel: %v", notification.Channel)
+	}
+
+	err = listener.Unlisten("unlisten_test")
+	if err != nil {
+		t.Fatalf("Unexpected error on Unlisten: %v", err)
+	}
+
+	// when notification has already been read during previous query
+	mustExec(t, notifier, "notify unlisten_test")
+	rows, _ := listener.Query("select 1")
+	rows.Close()
+	if rows.Err() != nil {
+		t.Fatalf("Unexpected error on Query: %v", rows.Err())
+	}
+	notification, err = listener.WaitForNotification(100 * time.Millisecond)
+	if err != pgx.ErrNotificationTimeout {
+		t.Errorf("WaitForNotification returned the wrong kind of error: %v", err)
+	}
+}
+
+func TestListenNotifyWhileBusyIsSafe(t *testing.T) {
+	t.Parallel()
+
+	listenerDone := make(chan bool)
+	go func() {
+		conn := mustConnect(t, *defaultConnConfig)
+		defer closeConn(t, conn)
+		defer func() {
+			listenerDone <- true
+		}()
+
+		if err := conn.Listen("busysafe"); err != nil {
+			t.Fatalf("Unable to start listening: %v", err)
+		}
+
+		for i := 0; i < 5000; i++ {
+			var sum int32
+			var rowCount int32
+
+			rows, err := conn.Query("select generate_series(1,$1)", 100)
+			if err != nil {
+				t.Fatalf("conn.Query failed: ", err)
+			}
+
+			for rows.Next() {
+				var n int32
+				rows.Scan(&n)
+				sum += n
+				rowCount++
+			}
+
+			if rows.Err() != nil {
+				t.Fatalf("conn.Query failed: ", err)
+			}
+
+			if sum != 5050 {
+				t.Fatalf("Wrong rows sum: %v", sum)
+			}
+
+			if rowCount != 100 {
+				t.Fatalf("Wrong number of rows: %v", rowCount)
+			}
+
+			time.Sleep(1 * time.Microsecond)
+		}
+	}()
+
+	notifierDone := make(chan bool)
+	go func() {
+		conn := mustConnect(t, *defaultConnConfig)
+		defer closeConn(t, conn)
+		defer func() {
+			notifierDone <- true
+		}()
+
+		for i := 0; i < 100000; i++ {
+			mustExec(t, conn, "notify busysafe, 'hello'")
+			time.Sleep(1 * time.Microsecond)
+		}
+	}()
+
+	<-listenerDone
+}
+
+func TestListenNotifySelfNotification(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	if err := conn.Listen("self"); err != nil {
+		t.Fatalf("Unable to start listening: %v", err)
+	}
+
+	// Notify self and WaitForNotification immediately
+	mustExec(t, conn, "notify self")
+
+	notification, err := conn.WaitForNotification(time.Second)
+	if err != nil {
+		t.Fatalf("Unexpected error on WaitForNotification: %v", err)
+	}
+	if notification.Channel != "self" {
+		t.Errorf("Did not receive notification on expected channel: %v", notification.Channel)
+	}
+
+	// Notify self and do something else before WaitForNotification
+	mustExec(t, conn, "notify self")
+
+	rows, _ := conn.Query("select 1")
+	rows.Close()
+	if rows.Err() != nil {
+		t.Fatalf("Unexpected error on Query: %v", rows.Err())
+	}
+
+	notification, err = conn.WaitForNotification(time.Second)
+	if err != nil {
+		t.Fatalf("Unexpected error on WaitForNotification: %v", err)
+	}
+	if notification.Channel != "self" {
+		t.Errorf("Did not receive notification on expected channel: %v", notification.Channel)
+	}
+}
+
 func TestFatalRxError(t *testing.T) {
 	t.Parallel()
 
@@ -856,27 +1090,32 @@ func TestFatalRxError(t *testing.T) {
 func TestFatalTxError(t *testing.T) {
 	t.Parallel()
 
-	conn := mustConnect(t, *defaultConnConfig)
-	defer closeConn(t, conn)
+	// Run timing sensitive test many times
+	for i := 0; i < 50; i++ {
+		func() {
+			conn := mustConnect(t, *defaultConnConfig)
+			defer closeConn(t, conn)
 
-	otherConn, err := pgx.Connect(*defaultConnConfig)
-	if err != nil {
-		t.Fatalf("Unable to establish connection: %v", err)
-	}
-	defer otherConn.Close()
+			otherConn, err := pgx.Connect(*defaultConnConfig)
+			if err != nil {
+				t.Fatalf("Unable to establish connection: %v", err)
+			}
+			defer otherConn.Close()
 
-	_, err = otherConn.Exec("select pg_terminate_backend($1)", conn.Pid)
-	if err != nil {
-		t.Fatalf("Unable to kill backend PostgreSQL process: %v", err)
-	}
+			_, err = otherConn.Exec("select pg_terminate_backend($1)", conn.Pid)
+			if err != nil {
+				t.Fatalf("Unable to kill backend PostgreSQL process: %v", err)
+			}
 
-	_, err = conn.Query("select 1")
-	if err == nil {
-		t.Fatal("Expected error but none occurred")
-	}
+			_, err = conn.Query("select 1")
+			if err == nil {
+				t.Fatal("Expected error but none occurred")
+			}
 
-	if conn.IsAlive() {
-		t.Fatal("Connection should not be live but was")
+			if conn.IsAlive() {
+				t.Fatalf("Connection should not be live but was. Previous Query err: %v", err)
+			}
+		}()
 	}
 }
 
@@ -934,5 +1173,41 @@ func TestInsertTimestampArray(t *testing.T) {
 	// Accept parameters
 	if results := mustExec(t, conn, "insert into foo(spice) values($1)", []time.Time{time.Unix(1419143667, 0), time.Unix(1419143672, 0)}); results != "INSERT 0 1" {
 		t.Errorf("Unexpected results from Exec: %v", results)
+	}
+}
+
+func TestCatchSimultaneousConnectionQueries(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	rows1, err := conn.Query("select generate_series(1,$1)", 10)
+	if err != nil {
+		t.Fatalf("conn.Query failed: ", err)
+	}
+	defer rows1.Close()
+
+	_, err = conn.Query("select generate_series(1,$1)", 10)
+	if err != pgx.ErrConnBusy {
+		t.Fatalf("conn.Query should have failed with pgx.ErrConnBusy, but it was %v", err)
+	}
+}
+
+func TestCatchSimultaneousConnectionQueryAndExec(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	rows, err := conn.Query("select generate_series(1,$1)", 10)
+	if err != nil {
+		t.Fatalf("conn.Query failed: ", err)
+	}
+	defer rows.Close()
+
+	_, err = conn.Exec("create temporary table foo(spice timestamp[])")
+	if err != pgx.ErrConnBusy {
+		t.Fatalf("conn.Exec should have failed with pgx.ErrConnBusy, but it was %v", err)
 	}
 }
