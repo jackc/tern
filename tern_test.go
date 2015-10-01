@@ -7,6 +7,7 @@ import (
 	"github.com/vaughan0/go-ini"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -76,6 +77,22 @@ func tableExists(t *testing.T, tableName string) bool {
 	return exists
 }
 
+func currentVersion(t *testing.T) int32 {
+	output := tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	re := regexp.MustCompile(`version:\s+(\d+)`)
+	match := re.FindStringSubmatch(output)
+	if match == nil {
+		t.Fatalf("could not extract current version from status:\n%s", output)
+	}
+
+	n, err := strconv.ParseInt(match[1], 10, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return int32(n)
+}
+
 func tern(t *testing.T, args ...string) string {
 	cmd := exec.Command("tmp/tern", args...)
 	output, err := cmd.CombinedOutput()
@@ -139,31 +156,42 @@ func TestNew(t *testing.T) {
 }
 
 func TestMigrate(t *testing.T) {
-	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
-	if tableExists(t, "t1") {
-		t.Fatal(`Did not expect table "t1" to exist`)
-	}
-	if tableExists(t, "t2") {
-		t.Fatal(`Did not expect table "t2" to exist`)
-	}
-
-	// Up all the way
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf")
-	if !tableExists(t, "t1") {
-		t.Fatal(`Expected table "t1" to exist`)
-	}
-	if !tableExists(t, "t2") {
-		t.Fatal(`Expected table "t2" to exist`)
+	tests := []struct {
+		args              []string
+		expectedExists    []string
+		expectedNotExists []string
+		expectedVersion   int32
+	}{
+		{[]string{"-d", "0"}, []string{}, []string{"t1", "t2"}, 0},
+		{[]string{}, []string{"t1", "t2"}, []string{}, 2},
+		{[]string{"-d", "1"}, []string{"t1"}, []string{"t2"}, 1},
+		{[]string{"-d", "-1"}, []string{}, []string{"t1", "t2"}, 0},
+		{[]string{"-d", "+1"}, []string{"t1"}, []string{"t2"}, 1},
+		{[]string{"-d", "+1"}, []string{"t1", "t2"}, []string{}, 2},
+		{[]string{"-d", "-+1"}, []string{"t1", "t2"}, []string{}, 2},
 	}
 
-	// Back one
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "1")
-	if !tableExists(t, "t1") {
-		t.Fatal(`Expected table "t1" to exist`)
-	}
-	if tableExists(t, "t2") {
-		t.Fatal(`Did not expect table "t2" to exist`)
+	for i, tt := range tests {
+		baseArgs := []string{"migrate", "-m", "testdata", "-c", "testdata/tern.conf"}
+		args := append(baseArgs, tt.args...)
+
+		tern(t, args...)
+
+		for _, tableName := range tt.expectedExists {
+			if !tableExists(t, tableName) {
+				t.Fatalf("%d. Expected table %s to exist, but it doesn't", i, tableName)
+			}
+		}
+
+		for _, tableName := range tt.expectedNotExists {
+			if tableExists(t, tableName) {
+				t.Fatalf("%d. Expected table %s to not exist, but it does", i, tableName)
+			}
+		}
+
+		if currentVersion(t) != tt.expectedVersion {
+			t.Fatalf(`Expected current version to be %d, but it was %d`, tt.expectedVersion, currentVersion(t))
+		}
 	}
 }
 

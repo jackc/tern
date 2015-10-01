@@ -124,8 +124,33 @@ func main() {
 	cmdMigrate := &cobra.Command{
 		Use:   "migrate",
 		Short: "Migrate the database",
-		Long:  "Migrate the database to destination version",
-		Run:   Migrate,
+		Long: `Migrate the database to destination migration version.
+
+Destination migration version can be one of the following value types:
+
+An integer:
+  Migrate to a specific migration.
+  e.g. tern -d 42
+
+"+" and an integer:
+  Migrate forward N steps.
+  e.g. tern -d +3
+
+"-" and an integer:
+  Migrate backward N steps.
+  e.g. tern -d -2
+
+"-+" and an integer:
+  Redo previous N steps (migrate backward N steps then forward N steps).
+  e.g. tern -d -+1
+
+The word "last":
+  Migrate to the most recent migration. This is the default value, so it is
+  never needed to specify directly.
+  e.g. tern
+  e.g. tern -d last
+		`,
+		Run: Migrate,
 	}
 	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
 	cmdMigrate.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
@@ -288,18 +313,36 @@ func Migrate(cmd *cobra.Command, args []string) {
 		fmt.Printf("%s executing %s %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), name, direction, sql)
 	}
 
+	var currentVersion int32
+	currentVersion, err = migrator.GetCurrentVersion()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to get current version:\n  %v\n", err)
+		os.Exit(1)
+	}
+
 	destination := cliOptions.destinationVersion
-	if destination == "last" {
-		err = migrator.Migrate()
-	} else {
+	mustParseDestination := func(d string) int32 {
 		var n int64
-		n, err = strconv.ParseInt(destination, 10, 32)
+		n, err = strconv.ParseInt(d, 10, 32)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Bad destination:\n  %v\n", err)
 			os.Exit(1)
 		}
-
-		err = migrator.MigrateTo(int32(n))
+		return int32(n)
+	}
+	if destination == "last" {
+		err = migrator.Migrate()
+	} else if len(destination) >= 3 && destination[0:2] == "-+" {
+		err = migrator.MigrateTo(currentVersion - mustParseDestination(destination[2:]))
+		if err == nil {
+			err = migrator.MigrateTo(currentVersion)
+		}
+	} else if len(destination) >= 2 && destination[0] == '-' {
+		err = migrator.MigrateTo(currentVersion - mustParseDestination(destination[1:]))
+	} else if len(destination) >= 2 && destination[0] == '+' {
+		err = migrator.MigrateTo(currentVersion + mustParseDestination(destination[1:]))
+	} else {
+		err = migrator.MigrateTo(mustParseDestination(destination))
 	}
 
 	if err != nil {
