@@ -116,25 +116,33 @@ func (c *Config) Connect() (*pgx.Conn, error) {
 func main() {
 	cmdInit := &cobra.Command{
 		Use:   "init DIRECTORY",
-		Short: "initialize a new tern project",
+		Short: "Initialize a new tern project",
 		Long:  "Initialize a new tern project in DIRECTORY",
 		Run:   Init,
 	}
 
 	cmdMigrate := &cobra.Command{
 		Use:   "migrate",
-		Short: "migrate the database",
-		Long:  "generate a new migration with the next sequence number and provided name",
+		Short: "Migrate the database",
+		Long:  "Migrate the database to destination version",
 		Run:   Migrate,
 	}
 	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
 	cmdMigrate.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
 	cmdMigrate.Flags().StringVarP(&cliOptions.configPath, "config", "c", "tern.conf", "config path")
 
+	cmdStatus := &cobra.Command{
+		Use:   "status",
+		Short: "Print current migration status",
+		Run:   Status,
+	}
+	cmdStatus.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdStatus.Flags().StringVarP(&cliOptions.configPath, "config", "c", "tern.conf", "config path")
+
 	cmdNew := &cobra.Command{
 		Use:   "new NAME",
-		Short: "generate a new migration",
-		Long:  "generate a new migration with the next sequence number and provided name",
+		Short: "Generate a new migration",
+		Long:  "Generate a new migration with the next sequence number and provided name",
 		Run:   NewMigration,
 	}
 	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
@@ -150,6 +158,7 @@ func main() {
 	rootCmd := &cobra.Command{Use: "tern", Short: "tern - PostgreSQL database migrator"}
 	rootCmd.AddCommand(cmdInit)
 	rootCmd.AddCommand(cmdMigrate)
+	rootCmd.AddCommand(cmdStatus)
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
@@ -311,6 +320,64 @@ func Migrate(cmd *cobra.Command, args []string) {
 		}
 		os.Exit(1)
 	}
+}
+
+func Status(cmd *cobra.Command, args []string) {
+	config, err := ReadConfig(cliOptions.configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading config:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	err = config.Validate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid config:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	conn, err := config.Connect()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+
+	migrator, err := migrate.NewMigrator(conn, config.VersionTable)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
+		os.Exit(1)
+	}
+	migrator.Data = config.Data
+
+	migrationsPath := cliOptions.migrationsPath
+	err = migrator.LoadMigrations(migrationsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
+		os.Exit(1)
+	}
+	if len(migrator.Migrations) == 0 {
+		fmt.Fprintln(os.Stderr, "No migrations found")
+		os.Exit(1)
+	}
+
+	migrationVersion, err := migrator.GetCurrentVersion()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error retrieving migration version:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	var status string
+	behindCount := len(migrator.Migrations) - int(migrationVersion)
+	if behindCount == 0 {
+		status = "up to date"
+	} else {
+		status = "migration(s) pending"
+	}
+
+	fmt.Println("status:  ", status)
+	fmt.Printf("version:  %d of %d\n", migrationVersion, len(migrator.Migrations))
+	fmt.Println("host:    ", config.ConnConfig.Host)
+	fmt.Println("database:", config.ConnConfig.Database)
 }
 
 func ReadConfig(path string) (*Config, error) {

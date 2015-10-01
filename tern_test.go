@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -75,12 +76,14 @@ func tableExists(t *testing.T, tableName string) bool {
 	return exists
 }
 
-func tern(t *testing.T, args ...string) {
+func tern(t *testing.T, args ...string) string {
 	cmd := exec.Command("tmp/tern", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("tern failed with: %v\noutput:\n%v", err, string(output))
 	}
+
+	return string(output)
 }
 
 func TestInitWithoutDirectory(t *testing.T) {
@@ -161,5 +164,37 @@ func TestMigrate(t *testing.T) {
 	}
 	if tableExists(t, "t2") {
 		t.Fatal(`Did not expect table "t2" to exist`)
+	}
+}
+
+func TestStatus(t *testing.T) {
+	// Ensure database is in clean state
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+
+	output := tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	expected := `status:   migration(s) pending
+version:  0 of 2`
+	if !strings.Contains(output, expected) {
+		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
+	}
+
+	// Up all the way
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf")
+
+	output = tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	expected = `status:   up to date
+version:  2 of 2`
+	if !strings.Contains(output, expected) {
+		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
+	}
+
+	// Back one
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "1")
+
+	output = tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	expected = `status:   migration(s) pending
+version:  1 of 2`
+	if !strings.Contains(output, expected) {
+		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
 	}
 }
