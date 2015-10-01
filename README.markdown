@@ -122,6 +122,18 @@ To migrate up or down to a specific version:
 
     tern migrate --destination 42
 
+To migrate up N versions:
+
+    tern migrate --destination +3
+
+To migrate down N versions:
+
+    tern migrate --destination -3
+
+To migrate down and rerun the previous N versions:
+
+    tern migrate --destination -+3
+
 To use a different config file:
 
     tern migrate --config path/to/tern.json
@@ -158,6 +170,12 @@ Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
+
+## 1.5.0 (October 1, 2015)
+
+* Add status command
+* Add relative migration destinations
+* Add redo migration destinations
 
 ## 1.4.0 (May 15, 2015)
 
