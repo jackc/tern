@@ -226,3 +226,27 @@ version:  1 of 2`
 		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
 	}
 }
+
+func TestCLIArgsWithoutConfigFile(t *testing.T) {
+	// Ensure database is in clean state
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+
+	connConfig, err := readConfig("testdata/tern.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output := tern(t, "status",
+		"-m", "testdata",
+		"--host", connConfig.Host,
+		"--port", strconv.FormatInt(int64(connConfig.Port), 10),
+		"--user", connConfig.User,
+		"--password", connConfig.Password,
+		"--database", connConfig.Database,
+	)
+	expected := `status:   migration(s) pending
+version:  0 of 2`
+	if !strings.Contains(output, expected) {
+		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
+	}
+}

@@ -73,6 +73,13 @@ var cliOptions struct {
 	destinationVersion string
 	migrationsPath     string
 	configPath         string
+	host               string
+	port               uint16
+	user               string
+	password           string
+	database           string
+	sslmode            string
+	versionTable       string
 }
 
 func (c *Config) Validate() error {
@@ -153,16 +160,14 @@ The word "last":
 		Run: Migrate,
 	}
 	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
-	cmdMigrate.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
-	cmdMigrate.Flags().StringVarP(&cliOptions.configPath, "config", "c", "tern.conf", "config path")
+	addConfigFlagsToCommand(cmdMigrate)
 
 	cmdStatus := &cobra.Command{
 		Use:   "status",
 		Short: "Print current migration status",
 		Run:   Status,
 	}
-	cmdStatus.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
-	cmdStatus.Flags().StringVarP(&cliOptions.configPath, "config", "c", "tern.conf", "config path")
+	addConfigFlagsToCommand(cmdStatus)
 
 	cmdNew := &cobra.Command{
 		Use:   "new NAME",
@@ -187,6 +192,19 @@ The word "last":
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
+}
+
+func addConfigFlagsToCommand(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmd.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
+	cmd.Flags().StringVarP(&cliOptions.host, "host", "", "", "database host")
+	cmd.Flags().Uint16VarP(&cliOptions.port, "port", "", 0, "database port")
+	cmd.Flags().StringVarP(&cliOptions.user, "user", "", "", "database user")
+	cmd.Flags().StringVarP(&cliOptions.password, "password", "", "", "database password")
+	cmd.Flags().StringVarP(&cliOptions.database, "database", "", "", "database name")
+	cmd.Flags().StringVarP(&cliOptions.sslmode, "sslmode", "", "", "SSL mode")
+	cmd.Flags().StringVarP(&cliOptions.versionTable, "version-table", "", "schema_version", "version table name")
+
 }
 
 func Init(cmd *cobra.Command, args []string) {
@@ -272,9 +290,9 @@ func NewMigration(cmd *cobra.Command, args []string) {
 }
 
 func Migrate(cmd *cobra.Command, args []string) {
-	config, err := ReadConfig(cliOptions.configPath)
+	config, err := LoadConfig()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading config:\n  %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error loading config:\n  %v\n", err)
 		os.Exit(1)
 	}
 
@@ -366,9 +384,9 @@ func Migrate(cmd *cobra.Command, args []string) {
 }
 
 func Status(cmd *cobra.Command, args []string) {
-	config, err := ReadConfig(cliOptions.configPath)
+	config, err := LoadConfig()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading config:\n  %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error loading config:\n  %v\n", err)
 		os.Exit(1)
 	}
 
@@ -423,32 +441,65 @@ func Status(cmd *cobra.Command, args []string) {
 	fmt.Println("database:", config.ConnConfig.Database)
 }
 
-func ReadConfig(path string) (*Config, error) {
-	file, err := ini.LoadFile(path)
-	if err != nil {
-		return nil, err
+func LoadConfig() (*Config, error) {
+	config := &Config{VersionTable: "schema_version", SslMode: "prefer"}
+
+	// Set default config path only if it exists
+	if cliOptions.configPath == "" {
+		if _, err := os.Stat("./tern.conf"); err == nil {
+			cliOptions.configPath = "./tern.conf"
+		}
 	}
 
-	config := &Config{VersionTable: "schema_version"}
-
-	config.ConnConfig.Host, _ = file.Get("database", "host")
-
-	// For backwards compatibility if host isn't set look for socket.
-	if config.ConnConfig.Host == "" {
-		config.ConnConfig.Host, _ = file.Get("database", "socket")
-	}
-
-	if p, ok := file.Get("database", "port"); ok {
-		n, err := strconv.ParseUint(p, 10, 16)
-		config.ConnConfig.Port = uint16(n)
+	if cliOptions.configPath != "" {
+		err := appendConfigFromFile(config, cliOptions.configPath)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	config.ConnConfig.Database, _ = file.Get("database", "database")
-	config.ConnConfig.User, _ = file.Get("database", "user")
-	config.ConnConfig.Password, _ = file.Get("database", "password")
+	appendConfigFromCLIArgs(config)
+
+	return config, nil
+}
+
+func appendConfigFromFile(config *Config, path string) error {
+	file, err := ini.LoadFile(path)
+	if err != nil {
+		return err
+	}
+
+	if host, ok := file.Get("database", "host"); ok {
+		config.ConnConfig.Host = host
+	}
+
+	// For backwards compatibility if host isn't set look for socket.
+	if config.ConnConfig.Host == "" {
+		if socket, ok := file.Get("database", "socket"); ok {
+			config.ConnConfig.Host = socket
+		}
+	}
+
+	if config.ConnConfig.Port == 0 {
+		if p, ok := file.Get("database", "port"); ok {
+			n, err := strconv.ParseUint(p, 10, 16)
+			if err != nil {
+				return err
+			}
+			config.ConnConfig.Port = uint16(n)
+		}
+	}
+
+	if database, ok := file.Get("database", "database"); ok {
+		config.ConnConfig.Database = database
+	}
+
+	if user, ok := file.Get("database", "user"); ok {
+		config.ConnConfig.User = user
+	}
+	if password, ok := file.Get("database", "password"); ok {
+		config.ConnConfig.Password = password
+	}
 
 	if vt, ok := file.Get("database", "version_table"); ok {
 		config.VersionTable = vt
@@ -456,8 +507,6 @@ func ReadConfig(path string) (*Config, error) {
 
 	if sslmode, ok := file.Get("database", "sslmode"); ok {
 		config.SslMode = sslmode
-	} else {
-		config.SslMode = "prefer"
 	}
 
 	config.Data = make(map[string]interface{})
@@ -465,5 +514,29 @@ func ReadConfig(path string) (*Config, error) {
 		config.Data[key] = value
 	}
 
-	return config, nil
+	return nil
+}
+
+func appendConfigFromCLIArgs(config *Config) {
+	if cliOptions.host != "" {
+		config.ConnConfig.Host = cliOptions.host
+	}
+	if cliOptions.port != 0 {
+		config.ConnConfig.Port = cliOptions.port
+	}
+	if cliOptions.database != "" {
+		config.ConnConfig.Database = cliOptions.database
+	}
+	if cliOptions.user != "" {
+		config.ConnConfig.User = cliOptions.user
+	}
+	if cliOptions.password != "" {
+		config.ConnConfig.Password = cliOptions.password
+	}
+	if cliOptions.sslmode != "" {
+		config.SslMode = cliOptions.sslmode
+	}
+	if cliOptions.versionTable != "" {
+		config.VersionTable = cliOptions.versionTable
+	}
 }
