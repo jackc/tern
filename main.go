@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"os"
@@ -92,7 +91,7 @@ func (c *Config) Validate() error {
 	}
 
 	switch c.SslMode {
-	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+	case "", "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
 		// okay
 	default:
 		return errors.New("sslmode is invalid")
@@ -102,18 +101,24 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) Connect() (*pgx.Conn, error) {
+	// If sslmode was set in config file or cli argument, set it in the
+	// environment so we can use pgx.ParseEnvLibpq to use pgx's built-in
+	// functionality.
 	switch c.SslMode {
-	case "disable":
-	case "allow":
-		c.ConnConfig.UseFallbackTLS = true
-		c.ConnConfig.FallbackTLSConfig = &tls.Config{InsecureSkipVerify: true}
-	case "prefer":
-		c.ConnConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-		c.ConnConfig.UseFallbackTLS = true
-		c.ConnConfig.FallbackTLSConfig = nil
-	case "require", "verify-ca", "verify-full":
-		c.ConnConfig.TLSConfig = &tls.Config{
-			ServerName: c.ConnConfig.Host,
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+		if err := os.Setenv("PGHOST", c.ConnConfig.Host); err != nil {
+			return nil, err
+		}
+		if err := os.Setenv("PGSSLMODE", c.SslMode); err != nil {
+			return nil, err
+		}
+
+		if cc, err := pgx.ParseEnvLibpq(); err == nil {
+			c.ConnConfig.TLSConfig = cc.TLSConfig
+			c.ConnConfig.UseFallbackTLS = cc.UseFallbackTLS
+			c.ConnConfig.FallbackTLSConfig = cc.FallbackTLSConfig
+		} else {
+			return nil, err
 		}
 	}
 
@@ -442,7 +447,12 @@ func Status(cmd *cobra.Command, args []string) {
 }
 
 func LoadConfig() (*Config, error) {
-	config := &Config{VersionTable: "schema_version", SslMode: "prefer"}
+	config := &Config{VersionTable: "schema_version"}
+	if connConfig, err := pgx.ParseEnvLibpq(); err == nil {
+		config.ConnConfig = connConfig
+	} else {
+		return nil, err
+	}
 
 	// Set default config path only if it exists
 	if cliOptions.configPath == "" {
