@@ -16,12 +16,16 @@ Or to create the project somewhere else:
 
     tern init path/to/project
 
-Tern projects are composed of a config file and a directory of migrations. See
-the sample directory for an example. By default tern will look in the current
-directory for the config file tern.conf and the migrations.
+Tern projects are composed of a directory of migrations and optionally a
+config file. See the sample directory for an example.
 
-The config file requires socket or host and database. User defaults to the
-current OS user.
+Database connection settings can be specified via the standard PostgreSQL
+environment variables (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, and
+PGSSLMODE), via program arguments, or in a config file. By default tern will
+look in the current directory for the config file tern.conf and the
+migrations.
+
+Sample tern.conf:
 
 ```ini
 [database]
@@ -170,6 +174,12 @@ Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
+
+## 1.6.0 (January 15, 2016)
+
+* Optionally read database connection settings from environment
+* Accept database connection settings via program arguments
+* Make config file optional
 
 ## 1.5.0 (October 1, 2015)
 
