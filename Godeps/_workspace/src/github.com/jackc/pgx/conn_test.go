@@ -258,6 +258,39 @@ func TestConnectCustomDialer(t *testing.T) {
 	}
 }
 
+func TestConnectWithRuntimeParams(t *testing.T) {
+	t.Parallel()
+
+	connConfig := *defaultConnConfig
+	connConfig.RuntimeParams = map[string]string{
+		"application_name": "pgxtest",
+		"search_path":      "myschema",
+	}
+
+	conn, err := pgx.Connect(connConfig)
+	if err != nil {
+		t.Fatalf("Unable to establish connection: %v", err)
+	}
+	defer conn.Close()
+
+	var s string
+	err = conn.QueryRow("show application_name").Scan(&s)
+	if err != nil {
+		t.Fatalf("QueryRow Scan unexpectedly failed: %v", err)
+	}
+	if s != "pgxtest" {
+		t.Errorf("Expected application_name to be %s, but it was %s", "pgxtest", s)
+	}
+
+	err = conn.QueryRow("show search_path").Scan(&s)
+	if err != nil {
+		t.Fatalf("QueryRow Scan unexpectedly failed: %v", err)
+	}
+	if s != "myschema" {
+		t.Errorf("Expected search_path to be %s, but it was %s", "myschema", s)
+	}
+}
+
 func TestParseURI(t *testing.T) {
 	t.Parallel()
 
@@ -278,6 +311,7 @@ func TestParseURI(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -291,6 +325,7 @@ func TestParseURI(t *testing.T) {
 				TLSConfig:         nil,
 				UseFallbackTLS:    false,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -306,6 +341,7 @@ func TestParseURI(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -321,6 +357,7 @@ func TestParseURI(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -335,6 +372,7 @@ func TestParseURI(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -348,6 +386,24 @@ func TestParseURI(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
+			},
+		},
+		{
+			url: "postgres://jack@localhost/mydb?application_name=pgxtest&search_path=myschema",
+			connParams: pgx.ConnConfig{
+				User:     "jack",
+				Host:     "localhost",
+				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
+				RuntimeParams: map[string]string{
+					"application_name": "pgxtest",
+					"search_path":      "myschema",
+				},
 			},
 		},
 	}
@@ -375,11 +431,12 @@ func TestParseDSN(t *testing.T) {
 		{
 			url: "user=jack password=secret host=localhost port=5432 dbname=mydb sslmode=disable",
 			connParams: pgx.ConnConfig{
-				User:     "jack",
-				Password: "secret",
-				Host:     "localhost",
-				Port:     5432,
-				Database: "mydb",
+				User:          "jack",
+				Password:      "secret",
+				Host:          "localhost",
+				Port:          5432,
+				Database:      "mydb",
+				RuntimeParams: map[string]string{},
 			},
 		},
 		{
@@ -395,6 +452,7 @@ func TestParseDSN(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -410,6 +468,7 @@ func TestParseDSN(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -424,6 +483,7 @@ func TestParseDSN(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -437,6 +497,24 @@ func TestParseDSN(t *testing.T) {
 				},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
+			},
+		},
+		{
+			url: "user=jack host=localhost dbname=mydb application_name=pgxtest search_path=myschema",
+			connParams: pgx.ConnConfig{
+				User:     "jack",
+				Host:     "localhost",
+				Database: "mydb",
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
+				RuntimeParams: map[string]string{
+					"application_name": "pgxtest",
+					"search_path":      "myschema",
+				},
 			},
 		},
 	}
@@ -455,7 +533,7 @@ func TestParseDSN(t *testing.T) {
 }
 
 func TestParseEnvLibpq(t *testing.T) {
-	pgEnvvars := []string{"PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD"}
+	pgEnvvars := []string{"PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD", "PGAPPNAME"}
 
 	savedEnv := make(map[string]string)
 	for _, n := range pgEnvvars {
@@ -482,6 +560,7 @@ func TestParseEnvLibpq(t *testing.T) {
 				TLSConfig:         &tls.Config{InsecureSkipVerify: true},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -502,6 +581,19 @@ func TestParseEnvLibpq(t *testing.T) {
 				TLSConfig:         &tls.Config{InsecureSkipVerify: true},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
+			},
+		},
+		{
+			name: "application_name",
+			envvars: map[string]string{
+				"PGAPPNAME": "pgxtest",
+			},
+			config: pgx.ConnConfig{
+				TLSConfig:         &tls.Config{InsecureSkipVerify: true},
+				UseFallbackTLS:    true,
+				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{"application_name": "pgxtest"},
 			},
 		},
 		{
@@ -512,6 +604,7 @@ func TestParseEnvLibpq(t *testing.T) {
 			config: pgx.ConnConfig{
 				TLSConfig:      nil,
 				UseFallbackTLS: false,
+				RuntimeParams:  map[string]string{},
 			},
 		},
 		{
@@ -523,6 +616,7 @@ func TestParseEnvLibpq(t *testing.T) {
 				TLSConfig:         nil,
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: &tls.Config{InsecureSkipVerify: true},
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -534,6 +628,7 @@ func TestParseEnvLibpq(t *testing.T) {
 				TLSConfig:         &tls.Config{InsecureSkipVerify: true},
 				UseFallbackTLS:    true,
 				FallbackTLSConfig: nil,
+				RuntimeParams:     map[string]string{},
 			},
 		},
 		{
@@ -544,6 +639,7 @@ func TestParseEnvLibpq(t *testing.T) {
 			config: pgx.ConnConfig{
 				TLSConfig:      &tls.Config{},
 				UseFallbackTLS: false,
+				RuntimeParams:  map[string]string{},
 			},
 		},
 		{
@@ -554,6 +650,7 @@ func TestParseEnvLibpq(t *testing.T) {
 			config: pgx.ConnConfig{
 				TLSConfig:      &tls.Config{},
 				UseFallbackTLS: false,
+				RuntimeParams:  map[string]string{},
 			},
 		},
 		{
@@ -564,6 +661,7 @@ func TestParseEnvLibpq(t *testing.T) {
 			config: pgx.ConnConfig{
 				TLSConfig:      &tls.Config{},
 				UseFallbackTLS: false,
+				RuntimeParams:  map[string]string{},
 			},
 		},
 		{
@@ -578,6 +676,7 @@ func TestParseEnvLibpq(t *testing.T) {
 					ServerName: "pgx.example",
 				},
 				UseFallbackTLS: false,
+				RuntimeParams:  map[string]string{},
 			},
 		},
 	}
@@ -617,6 +716,10 @@ func TestParseEnvLibpq(t *testing.T) {
 		}
 		if config.Password != tt.config.Password {
 			t.Errorf("%s: expected Password to be %v got %v", tt.name, tt.config.Password, config.Password)
+		}
+
+		if !reflect.DeepEqual(config.RuntimeParams, tt.config.RuntimeParams) {
+			t.Errorf("%s: expected RuntimeParams to be %#v got %#v", tt.name, tt.config.RuntimeParams, config.RuntimeParams)
 		}
 
 		tlsTests := []struct {
@@ -846,6 +949,36 @@ func TestPrepareQueryManyParameters(t *testing.T) {
 	}
 
 	ensureConnValid(t, conn)
+}
+
+func TestPrepareIdempotency(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	for i := 0; i < 2; i++ {
+		_, err := conn.Prepare("test", "select 42::integer")
+		if err != nil {
+			t.Fatalf("%d. Unable to prepare statement: %v", i, err)
+		}
+
+		var n int32
+		err = conn.QueryRow("test").Scan(&n)
+		if err != nil {
+			t.Errorf("%d. Executing prepared statement failed: %v", i, err)
+		}
+
+		if n != int32(42) {
+			t.Errorf("%d. Prepared statement did not return expected value: %v", i, n)
+		}
+	}
+
+	_, err := conn.Prepare("test", "select 'fail'::varchar")
+	if err == nil {
+		t.Fatalf("Prepare statement with same name but different SQL should have failed but it didn't")
+		return
+	}
 }
 
 func TestListenNotify(t *testing.T) {

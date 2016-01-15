@@ -1,6 +1,7 @@
 package pgx
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"net"
@@ -11,10 +12,9 @@ import (
 // Row is a convenience wrapper over Rows that is returned by QueryRow.
 type Row Rows
 
-// Scan reads the values from the row into dest values positionally. dest can
-// include pointers to core types and the Scanner interface. If no rows were
-// found it returns ErrNoRows. If multiple rows are returned it ignores all but
-// the first.
+// Scan works the same as (*Rows Scan) with the following exceptions. If no
+// rows were found it returns ErrNoRows. If multiple rows are returned it
+// ignores all but the first.
 func (r *Row) Scan(dest ...interface{}) (err error) {
 	rows := (*Rows)(r)
 
@@ -215,8 +215,19 @@ func (rows *Rows) nextColumn() (*ValueReader, bool) {
 	return &rows.vr, true
 }
 
+type scanArgError struct {
+	col int
+	err error
+}
+
+func (e scanArgError) Error() string {
+	return fmt.Sprintf("can't scan into dest[%d]: %v", e.col, e.err)
+}
+
 // Scan reads the values from the current row into dest values positionally.
-// dest can include pointers to core types and the Scanner interface.
+// dest can include pointers to core types, values implementing the Scanner
+// interface, and []byte. []byte will skip the decoding process and directly
+// copy the raw bytes received from PostgreSQL.
 func (rows *Rows) Scan(dest ...interface{}) (err error) {
 	if len(rows.fields) != len(dest) {
 		err = fmt.Errorf("Scan received wrong number of arguments, got %d but expected %d", len(dest), len(rows.fields))
@@ -224,7 +235,7 @@ func (rows *Rows) Scan(dest ...interface{}) (err error) {
 		return err
 	}
 
-	for _, d := range dest {
+	for i, d := range dest {
 		vr, _ := rows.nextColumn()
 
 		// Check for []byte first as we allow sidestepping the decoding process and retrieving the raw bytes
@@ -243,7 +254,41 @@ func (rows *Rows) Scan(dest ...interface{}) (err error) {
 		} else if s, ok := d.(Scanner); ok {
 			err = s.Scan(vr)
 			if err != nil {
-				rows.Fatal(err)
+				rows.Fatal(scanArgError{col: i, err: err})
+			}
+		} else if s, ok := d.(sql.Scanner); ok {
+			var val interface{}
+			if 0 <= vr.Len() {
+				switch vr.Type().DataType {
+				case BoolOid:
+					val = decodeBool(vr)
+				case Int8Oid:
+					val = int64(decodeInt8(vr))
+				case Int2Oid:
+					val = int64(decodeInt2(vr))
+				case Int4Oid:
+					val = int64(decodeInt4(vr))
+				case TextOid, VarcharOid:
+					val = decodeText(vr)
+				case OidOid:
+					val = int64(decodeOid(vr))
+				case Float4Oid:
+					val = float64(decodeFloat4(vr))
+				case Float8Oid:
+					val = decodeFloat8(vr)
+				case DateOid:
+					val = decodeDate(vr)
+				case TimestampOid:
+					val = decodeTimestamp(vr)
+				case TimestampTzOid:
+					val = decodeTimestampTz(vr)
+				default:
+					val = vr.ReadBytes(vr.Len())
+				}
+			}
+			err = s.Scan(val)
+			if err != nil {
+				rows.Fatal(scanArgError{col: i, err: err})
 			}
 		} else if vr.Type().DataType == JsonOid || vr.Type().DataType == JsonbOid {
 			decodeJson(vr, &d)
@@ -291,10 +336,12 @@ func (rows *Rows) Scan(dest ...interface{}) (err error) {
 				case TimestampOid:
 					*v = decodeTimestamp(vr)
 				default:
-					rows.Fatal(fmt.Errorf("Can't convert OID %v to time.Time", vr.Type().DataType))
+					rows.Fatal(scanArgError{col: i, err: fmt.Errorf("Can't convert OID %v to time.Time", vr.Type().DataType)})
 				}
 			case *net.IPNet:
 				*v = decodeInet(vr)
+			case *[]net.IPNet:
+				*v = decodeInetArray(vr)
 			default:
 				// if d is a pointer to pointer, strip the pointer and try again
 				if v := reflect.ValueOf(d); v.Kind() == reflect.Ptr {
@@ -316,12 +363,12 @@ func (rows *Rows) Scan(dest ...interface{}) (err error) {
 						}
 					}
 				}
-				rows.Fatal(fmt.Errorf("Scan cannot decode into %T", d))
+				rows.Fatal(scanArgError{col: i, err: fmt.Errorf("Scan cannot decode into %T", d)})
 			}
 
 		}
 		if vr.Err() != nil {
-			rows.Fatal(vr.Err())
+			rows.Fatal(scanArgError{col: i, err: vr.Err()})
 		}
 
 		if rows.Err() != nil {
@@ -365,6 +412,8 @@ func (rows *Rows) Values() ([]interface{}, error) {
 				values = append(values, decodeInt2(vr))
 			case Int4Oid:
 				values = append(values, decodeInt4(vr))
+			case OidOid:
+				values = append(values, decodeOid(vr))
 			case Float4Oid:
 				values = append(values, decodeFloat4(vr))
 			case Float8Oid:

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/md5"
 	"crypto/tls"
+	"database/sql/driver"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -36,6 +37,7 @@ type ConnConfig struct {
 	Logger            Logger
 	LogLevel          int
 	Dial              DialFunc
+	RuntimeParams     map[string]string // Run-time parameters to set on connection as session default values (e.g. search_path or application_name)
 }
 
 // Conn is a PostgreSQL connection handle. It is not safe for concurrent usage.
@@ -64,10 +66,12 @@ type Conn struct {
 	pgsql_af_inet      byte
 	pgsql_af_inet6     byte
 	busy               bool
+	poolResetCount     int
 }
 
 type PreparedStatement struct {
 	Name              string
+	SQL               string
 	FieldDescriptions []FieldDescription
 	ParameterOids     []Oid
 }
@@ -218,10 +222,25 @@ func (c *Conn) connect(config ConnConfig, network, address string, tlsConfig *tl
 	c.mr.reader = c.reader
 
 	msg := newStartupMessage()
+
+	// Default to disabling TLS renegotiation.
+	//
+	// Go does not support (https://github.com/golang/go/issues/5742)
+	// PostgreSQL recommends disabling (http://www.postgresql.org/docs/9.4/static/runtime-config-connection.html#GUC-SSL-RENEGOTIATION-LIMIT)
+	if tlsConfig != nil {
+		msg.options["ssl_renegotiation_limit"] = "0"
+	}
+
+	// Copy default run-time params
+	for k, v := range config.RuntimeParams {
+		msg.options[k] = v
+	}
+
 	msg.options["user"] = c.config.User
 	if c.config.Database != "" {
 		msg.options["database"] = c.config.Database
 	}
+
 	if err = c.txStartupMessage(msg); err != nil {
 		return err
 	}
@@ -327,6 +346,8 @@ func (c *Conn) Close() (err error) {
 }
 
 // ParseURI parses a database URI into ConnConfig
+//
+// Query parameters not used by the connection process are parsed into ConnConfig.RuntimeParams.
 func ParseURI(uri string) (ConnConfig, error) {
 	var cp ConnConfig
 
@@ -356,14 +377,32 @@ func ParseURI(uri string) (ConnConfig, error) {
 		return cp, err
 	}
 
+	ignoreKeys := map[string]struct{}{
+		"sslmode": struct{}{},
+	}
+
+	cp.RuntimeParams = make(map[string]string)
+
+	for k, v := range url.Query() {
+		if _, ok := ignoreKeys[k]; ok {
+			continue
+		}
+
+		cp.RuntimeParams[k] = v[0]
+	}
+
 	return cp, nil
 }
 
-var dsn_regexp = regexp.MustCompile(`([a-z]+)=((?:"[^"]+")|(?:[^ ]+))`)
+var dsn_regexp = regexp.MustCompile(`([a-zA-Z_]+)=((?:"[^"]+")|(?:[^ ]+))`)
 
 // ParseDSN parses a database DSN (data source name) into a ConnConfig
 //
 // e.g. ParseDSN("user=username password=password host=1.2.3.4 port=5432 dbname=mydb sslmode=disable")
+//
+// Any options not used by the connection process are parsed into ConnConfig.RuntimeParams.
+//
+// e.g. ParseDSN("application_name=pgxtest search_path=admin user=username password=password host=1.2.3.4 dbname=mydb")
 //
 // ParseDSN tries to match libpq behavior with regard to sslmode. See comments
 // for ParseEnvLibpq for more information on the security implications of
@@ -374,6 +413,8 @@ func ParseDSN(s string) (ConnConfig, error) {
 	m := dsn_regexp.FindAllStringSubmatch(s, -1)
 
 	var sslmode string
+
+	cp.RuntimeParams = make(map[string]string)
 
 	for _, b := range m {
 		switch b[1] {
@@ -393,6 +434,8 @@ func ParseDSN(s string) (ConnConfig, error) {
 			cp.Database = b[2]
 		case "sslmode":
 			sslmode = b[2]
+		default:
+			cp.RuntimeParams[b[1]] = b[2]
 		}
 	}
 
@@ -416,6 +459,7 @@ func ParseDSN(s string) (ConnConfig, error) {
 // PGUSER
 // PGPASSWORD
 // PGSSLMODE
+// PGAPPNAME
 //
 // Important TLS Security Notes:
 // ParseEnvLibpq tries to match libpq behavior with regard to PGSSLMODE. This
@@ -458,6 +502,11 @@ func ParseEnvLibpq() (ConnConfig, error) {
 		return cc, err
 	}
 
+	cc.RuntimeParams = make(map[string]string)
+	if appname := os.Getenv("PGAPPNAME"); appname != "" {
+		cc.RuntimeParams["application_name"] = appname
+	}
+
 	return cc, nil
 }
 
@@ -489,7 +538,17 @@ func configSSL(sslmode string, cc *ConnConfig) error {
 
 // Prepare creates a prepared statement with name and sql. sql can contain placeholders
 // for bound parameters. These placeholders are referenced positional as $1, $2, etc.
+//
+// Prepare is idempotent; i.e. it is safe to call Prepare multiple times with the same
+// name and sql arguments. This allows a code path to Prepare and Query/Exec without
+// concern for if the statement has already been prepared.
 func (c *Conn) Prepare(name, sql string) (ps *PreparedStatement, err error) {
+	if name != "" {
+		if ps, ok := c.preparedStatements[name]; ok && ps.SQL == sql {
+			return ps, nil
+		}
+	}
+
 	if c.logLevel >= LogLevelError {
 		defer func() {
 			if err != nil {
@@ -519,7 +578,7 @@ func (c *Conn) Prepare(name, sql string) (ps *PreparedStatement, err error) {
 		return nil, err
 	}
 
-	ps = &PreparedStatement{Name: name}
+	ps = &PreparedStatement{Name: name, SQL: sql}
 
 	var softErr error
 
@@ -783,7 +842,7 @@ func (c *Conn) sendPreparedQuery(ps *PreparedStatement, arguments ...interface{}
 			wbuf.WriteInt16(TextFormatCode)
 		default:
 			switch oid {
-			case BoolOid, ByteaOid, Int2Oid, Int4Oid, Int8Oid, Float4Oid, Float8Oid, TimestampTzOid, TimestampTzArrayOid, TimestampOid, TimestampArrayOid, DateOid, BoolArrayOid, Int2ArrayOid, Int4ArrayOid, Int8ArrayOid, Float4ArrayOid, Float8ArrayOid, TextArrayOid, VarcharArrayOid, OidOid, InetOid, CidrOid:
+			case BoolOid, ByteaOid, Int2Oid, Int4Oid, Int8Oid, Float4Oid, Float8Oid, TimestampTzOid, TimestampTzArrayOid, TimestampOid, TimestampArrayOid, DateOid, BoolArrayOid, Int2ArrayOid, Int4ArrayOid, Int8ArrayOid, Float4ArrayOid, Float8ArrayOid, TextArrayOid, VarcharArrayOid, OidOid, InetOid, CidrOid, InetArrayOid, CidrArrayOid:
 				wbuf.WriteInt16(BinaryFormatCode)
 			default:
 				wbuf.WriteInt16(TextFormatCode)
@@ -793,17 +852,24 @@ func (c *Conn) sendPreparedQuery(ps *PreparedStatement, arguments ...interface{}
 
 	wbuf.WriteInt16(int16(len(arguments)))
 	for i, oid := range ps.ParameterOids {
+	encode:
 		if arguments[i] == nil {
 			wbuf.WriteInt32(-1)
 			continue
 		}
 
-	encode:
 		switch arg := arguments[i].(type) {
 		case Encoder:
 			err = arg.Encode(wbuf, oid)
+		case driver.Valuer:
+			arguments[i], err = arg.Value()
+			if err == nil {
+				goto encode
+			}
 		case string:
 			err = encodeText(wbuf, arguments[i])
+		case []byte:
+			err = encodeBytea(wbuf, arguments[i])
 		default:
 			if v := reflect.ValueOf(arguments[i]); v.Kind() == reflect.Ptr {
 				if v.IsNil() {
@@ -839,6 +905,10 @@ func (c *Conn) sendPreparedQuery(ps *PreparedStatement, arguments ...interface{}
 				err = encodeTimestamp(wbuf, arguments[i])
 			case InetOid, CidrOid:
 				err = encodeInet(wbuf, arguments[i])
+			case InetArrayOid:
+				err = encodeInetArray(wbuf, arguments[i], InetOid)
+			case CidrArrayOid:
+				err = encodeInetArray(wbuf, arguments[i], CidrOid)
 			case BoolArrayOid:
 				err = encodeBoolArray(wbuf, arguments[i])
 			case Int2ArrayOid:
@@ -864,11 +934,7 @@ func (c *Conn) sendPreparedQuery(ps *PreparedStatement, arguments ...interface{}
 			case JsonOid, JsonbOid:
 				err = encodeJson(wbuf, arguments[i])
 			default:
-				if s, ok := arguments[i].(string); ok {
-					err = encodeText(wbuf, s)
-				} else {
-					return SerializationError(fmt.Sprintf("Cannot encode %T into oid %v - %T must implement Encoder or be converted to a string", arg, oid, arg))
-				}
+				return SerializationError(fmt.Sprintf("Cannot encode %T into oid %v - %T must implement Encoder or be converted to a string", arg, oid, arg))
 			}
 		}
 		if err != nil {

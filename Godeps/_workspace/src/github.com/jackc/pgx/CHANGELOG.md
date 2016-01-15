@@ -1,5 +1,23 @@
-# Master
+# Tip
 
+* Add support for database/sql.Scanner and database/sql/driver.Valuer interfaces
+* Go float64 can no longer be encoded to a PostgreSQL float4
+* Add ConnPool.Reset method
+* []byte skips encoding/decoding
+* Rows.Scan errors now include which argument caused error
+
+# 2.7.1 (October 26, 2015)
+
+* Disable SSL renegotiation
+
+# 2.7.0 (October 16, 2015)
+
+* Add RuntimeParams to ConnConfig
+* ParseURI extracts RuntimeParams
+* ParseDSN extracts RuntimeParams
+* ParseEnvLibpq extracts PGAPPNAME
+* Prepare is now idempotent
+* Rows.Values now supports oid type
 * ConnPool.Release automatically unlistens connections (Joseph Glanville)
 * Add trace log level
 * Add more efficient log leveling

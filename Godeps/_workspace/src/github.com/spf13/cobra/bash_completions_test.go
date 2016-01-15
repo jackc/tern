@@ -34,7 +34,7 @@ COMPREPLY=( "hello" )
 func TestBashCompletions(t *testing.T) {
 	c := initializeWithRootCmd()
 	cmdEcho.AddCommand(cmdTimes)
-	c.AddCommand(cmdEcho, cmdPrint, cmdDeprecated)
+	c.AddCommand(cmdEcho, cmdPrint, cmdDeprecated, cmdColon)
 
 	// custom completion function
 	c.BashCompletionFunction = bash_completion_func
@@ -50,6 +50,12 @@ func TestBashCompletions(t *testing.T) {
 	var flagval string
 	c.Flags().StringVar(&flagval, "filename", "", "Enter a filename")
 	c.MarkFlagFilename("filename", "json", "yaml", "yml")
+
+	// persistent filename
+	var flagvalPersistent string
+	c.PersistentFlags().StringVar(&flagvalPersistent, "persistent-filename", "", "Enter a filename")
+	c.MarkPersistentFlagFilename("persistent-filename")
+	c.MarkPersistentFlagRequired("persistent-filename")
 
 	// filename extensions
 	var flagvalExt string
@@ -69,9 +75,11 @@ func TestBashCompletions(t *testing.T) {
 	check(t, str, "_cobra-test_echo")
 	check(t, str, "_cobra-test_echo_times")
 	check(t, str, "_cobra-test_print")
+	check(t, str, "_cobra-test_cmd__colon")
 
 	// check for required flags
 	check(t, str, `must_have_one_flag+=("--introot=")`)
+	check(t, str, `must_have_one_flag+=("--persistent-filename=")`)
 	// check for custom completion function
 	check(t, str, `COMPREPLY=( "hello" )`)
 	// check for required nouns

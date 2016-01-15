@@ -41,11 +41,14 @@ func TestStressConnPool(t *testing.T) {
 		{"txMultipleQueries", txMultipleQueries},
 		{"notify", notify},
 		{"listenAndPoolUnlistens", listenAndPoolUnlistens},
+		{"reset", func(p *pgx.ConnPool, n int) error { p.Reset(); return nil }},
 	}
 
-	actionCount := 5000
+	var timer *time.Timer
 	if testing.Short() {
-		actionCount /= 10
+		timer = time.NewTimer(5 * time.Second)
+	} else {
+		timer = time.NewTimer(60 * time.Second)
 	}
 	workerCount := 16
 
@@ -69,8 +72,11 @@ func TestStressConnPool(t *testing.T) {
 		go work()
 	}
 
-	for i := 0; i < actionCount; i++ {
+	var stop bool
+	for i := 0; !stop; i++ {
 		select {
+		case <-timer.C:
+			stop = true
 		case workChan <- i:
 		case err := <-errChan:
 			close(workChan)
@@ -81,6 +87,42 @@ func TestStressConnPool(t *testing.T) {
 
 	for i := 0; i < workerCount; i++ {
 		<-doneChan
+	}
+}
+
+func TestStressTLSConnection(t *testing.T) {
+	t.Parallel()
+
+	if tlsConnConfig == nil {
+		t.Skip("Skipping due to undefined tlsConnConfig")
+	}
+
+	if testing.Short() {
+		t.Skip("Skipping due to testing -short")
+	}
+
+	conn, err := pgx.Connect(*tlsConnConfig)
+	if err != nil {
+		t.Fatalf("Unable to establish connection: %v", err)
+	}
+	defer conn.Close()
+
+	for i := 0; i < 50; i++ {
+		sql := `select * from generate_series(1, $1)`
+
+		rows, err := conn.Query(sql, 2000000)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var n int32
+		for rows.Next() {
+			rows.Scan(&n)
+		}
+
+		if rows.Err() != nil {
+			t.Fatalf("queryCount: %d, Row number: %d. %v", i, n, rows.Err())
+		}
 	}
 }
 

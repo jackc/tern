@@ -1,48 +1,23 @@
 {
 	"ImportPath": "github.com/jackc/tern",
-	"GoVersion": "go1.5",
-	"Packages": [
-		"./..."
-	],
+	"GoVersion": "go1.5.3",
 	"Deps": [
 		{
-			"ImportPath": "github.com/cpuguy83/go-md2man/md2man",
-			"Comment": "v1.0.4",
-			"Rev": "71acacd42f85e5e82f70a55327789582a5200a90"
-		},
-		{
-			"ImportPath": "github.com/inconshreveable/mousetrap",
-			"Rev": "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
-		},
-		{
 			"ImportPath": "github.com/jackc/pgx",
-			"Comment": "v2.6.0-42-g36fb7a3",
-			"Rev": "36fb7a3aeca9873e102c38d5d65d4fdc845674ad"
-		},
-		{
-			"ImportPath": "github.com/russross/blackfriday",
-			"Comment": "v1.3",
-			"Rev": "8cec3a854e68dba10faabbe31c089abf4a3e57a6"
-		},
-		{
-			"ImportPath": "github.com/shurcooL/sanitized_anchor_name",
-			"Rev": "244f5ac324cb97e1987ef901a0081a77bfd8e845"
+			"Comment": "v2.7.1-20-g9f9a977",
+			"Rev": "9f9a9779ac794e885f6fbb04935724f03149f092"
 		},
 		{
 			"ImportPath": "github.com/spf13/cobra",
-			"Rev": "d732ab3a34e6e9e6b5bdac80707c2b6bad852936"
+			"Rev": "9c9300901990faada0c5fb3b5730f452585c7c2b"
 		},
 		{
 			"ImportPath": "github.com/spf13/pflag",
-			"Rev": "b084184666e02084b8ccb9b704bf0d79c466eb1d"
+			"Rev": "7f60f83a2c81bc3c3c0d5297f61ddfa68da9d3b7"
 		},
 		{
 			"ImportPath": "github.com/vaughan0/go-ini",
 			"Rev": "a98ad7ee00ec53921f08832bc06ecf7fd600e6a1"
-		},
-		{
-			"ImportPath": "gopkg.in/check.v1",
-			"Rev": "871360013c92e1c715c2de6d06b54899468a8a2d"
 		}
 	]
 }

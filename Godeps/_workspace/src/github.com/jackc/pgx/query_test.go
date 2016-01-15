@@ -2,10 +2,13 @@ package pgx_test
 
 import (
 	"bytes"
+	"database/sql"
 	"github.com/jackc/pgx"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 func TestConnQueryScan(t *testing.T) {
@@ -49,7 +52,7 @@ func TestConnQueryValues(t *testing.T) {
 
 	var rowCount int32
 
-	rows, err := conn.Query("select 'foo', n, null from generate_series(1,$1) n", 10)
+	rows, err := conn.Query("select 'foo', n, null, n::oid from generate_series(1,$1) n", 10)
 	if err != nil {
 		t.Fatalf("conn.Query failed: ", err)
 	}
@@ -62,8 +65,8 @@ func TestConnQueryValues(t *testing.T) {
 		if err != nil {
 			t.Fatalf("rows.Values failed: %v", err)
 		}
-		if len(values) != 3 {
-			t.Errorf("Expected rows.Values to return 3 values, but it returned %d", len(values))
+		if len(values) != 4 {
+			t.Errorf("Expected rows.Values to return 4 values, but it returned %d", len(values))
 		}
 		if values[0] != "foo" {
 			t.Errorf(`Expected values[0] to be "foo", but it was %v`, values[0])
@@ -78,6 +81,10 @@ func TestConnQueryValues(t *testing.T) {
 
 		if values[2] != nil {
 			t.Errorf(`Expected values[2] to be %d, but it was %d`, nil, values[2])
+		}
+
+		if values[3] != pgx.Oid(rowCount) {
+			t.Errorf(`Expected values[3] to be %d, but it was %d`, rowCount, values[3])
 		}
 	}
 
@@ -155,6 +162,10 @@ func TestConnQueryReadWrongTypeError(t *testing.T) {
 
 	if rows.Err() == nil {
 		t.Fatal("Expected Rows to have an error after an improper read but it didn't")
+	}
+
+	if rows.Err().Error() != "can't scan into dest[0]: Can't convert OID 23 to time.Time" {
+		t.Fatalf("Expected different Rows.Err(): %v", rows.Err())
 	}
 
 	ensureConnValid(t, conn)
@@ -427,6 +438,7 @@ func TestQueryRowCoreByteSlice(t *testing.T) {
 	}{
 		{"select $1::text", "Jack", []byte("Jack")},
 		{"select $1::text", []byte("Jack"), []byte("Jack")},
+		{"select $1::int4", int32(239023409), []byte{14, 63, 53, 49}},
 		{"select $1::varchar", []byte("Jack"), []byte("Jack")},
 		{"select $1::bytea", []byte{0, 15, 255, 17}, []byte{0, 15, 255, 17}},
 	}
@@ -445,6 +457,30 @@ func TestQueryRowCoreByteSlice(t *testing.T) {
 
 		ensureConnValid(t, conn)
 	}
+}
+
+func TestQueryRowByteSliceArgument(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	sql := "select $1::int4"
+	queryArg := []byte{14, 63, 53, 49}
+	expected := int32(239023409)
+
+	var actual int32
+
+	err := conn.QueryRow(sql, queryArg).Scan(&actual)
+	if err != nil {
+		t.Errorf("Unexpected failure: %v (sql -> %v)", err, sql)
+	}
+
+	if expected != actual {
+		t.Errorf("Expected %v, got %v (sql -> %v)", expected, actual, sql)
+	}
+
+	ensureConnValid(t, conn)
 }
 
 func TestQueryRowUnknownType(t *testing.T) {
@@ -870,4 +906,114 @@ func TestReadingNullByteArrays(t *testing.T) {
 	if count != 2 {
 		t.Errorf("Expected to read 2 rows, read: ", count)
 	}
+}
+
+// Use github.com/shopspring/decimal as real-world database/sql custom type
+// to test against.
+func TestConnQueryDatabaseSQLScanner(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	var num decimal.Decimal
+
+	err := conn.QueryRow("select '1234.567'::decimal").Scan(&num)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	expected, err := decimal.NewFromString("1234.567")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !num.Equals(expected) {
+		t.Errorf("Expected num to be %v, but it was %v", expected, num)
+	}
+
+	ensureConnValid(t, conn)
+}
+
+// Use github.com/shopspring/decimal as real-world database/sql custom type
+// to test against.
+func TestConnQueryDatabaseSQLDriverValuer(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	expected, err := decimal.NewFromString("1234.567")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var num decimal.Decimal
+
+	err = conn.QueryRow("select $1::decimal", expected).Scan(&num)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if !num.Equals(expected) {
+		t.Errorf("Expected num to be %v, but it was %v", expected, num)
+	}
+
+	ensureConnValid(t, conn)
+}
+
+func TestConnQueryDatabaseSQLNullX(t *testing.T) {
+	t.Parallel()
+
+	conn := mustConnect(t, *defaultConnConfig)
+	defer closeConn(t, conn)
+
+	type row struct {
+		boolValid    sql.NullBool
+		boolNull     sql.NullBool
+		int64Valid   sql.NullInt64
+		int64Null    sql.NullInt64
+		float64Valid sql.NullFloat64
+		float64Null  sql.NullFloat64
+		stringValid  sql.NullString
+		stringNull   sql.NullString
+	}
+
+	expected := row{
+		boolValid:    sql.NullBool{Bool: true, Valid: true},
+		int64Valid:   sql.NullInt64{Int64: 123, Valid: true},
+		float64Valid: sql.NullFloat64{Float64: 3.14, Valid: true},
+		stringValid:  sql.NullString{String: "pgx", Valid: true},
+	}
+
+	var actual row
+
+	err := conn.QueryRow(
+		"select $1::bool, $2::bool, $3::int8, $4::int8, $5::float8, $6::float8, $7::text, $8::text",
+		expected.boolValid,
+		expected.boolNull,
+		expected.int64Valid,
+		expected.int64Null,
+		expected.float64Valid,
+		expected.float64Null,
+		expected.stringValid,
+		expected.stringNull,
+	).Scan(
+		&actual.boolValid,
+		&actual.boolNull,
+		&actual.int64Valid,
+		&actual.int64Null,
+		&actual.float64Valid,
+		&actual.float64Null,
+		&actual.stringValid,
+		&actual.stringNull,
+	)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if expected != actual {
+		t.Errorf("Expected %v, but got %v", expected, actual)
+	}
+
+	ensureConnValid(t, conn)
 }
