@@ -200,6 +200,11 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.6.1 (January 16, 2016)
+
+* Fix version output
+* Evaluate config files through text/template with ENV
+
 ## 1.6.0 (January 15, 2016)
 
 * Optionally read database connection settings from environment
