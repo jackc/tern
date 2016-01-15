@@ -19,13 +19,30 @@ Or to create the project somewhere else:
 Tern projects are composed of a directory of migrations and optionally a
 config file. See the sample directory for an example.
 
+# Configuration
+
 Database connection settings can be specified via the standard PostgreSQL
 environment variables (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, and
 PGSSLMODE), via program arguments, or in a config file. By default tern will
 look in the current directory for the config file tern.conf and the
 migrations.
 
-Sample tern.conf:
+The `tern.conf` file is stored in the `ini` format with two sections,
+`database` and `data`. The `database` section contains settings for connection
+to the database server.
+
+Values in the `data` section will be available for interpolation into
+migrations. This can help in scenarios where migrations are managing
+permissions and the user to which permissions are granted should be
+configurable.
+
+If all database settings are supplied by PG* environment variables or program
+arguments the config file is not required.
+
+The entire `tern.conf` file is processed through the Go standard
+`text/template` package. The program environment is available at `.env`.
+
+Example `tern.conf`:
 
 ```ini
 [database]
@@ -35,7 +52,7 @@ host = 127.0.0.1
 # port = 5432
 database = tern_test
 user = jack
-# password = secret
+password = {{.env.MIGRATOR_PASSWORD}}
 # version_table = schema_version
 #
 # sslmode generally matches the behavior described in:
@@ -49,10 +66,18 @@ user = jack
 
 [data]
 prefix = foo
+app_user = joe
 
 ```
 
-Values in the data section will be available for interpolation into migrations.
+This flexibility configuration style allows handling multiple environments such
+as test, development, and production in several ways.
+
+* Separate config file for each environment
+* Environment variables for database settings and optionally one config file
+  for shared settings
+* Program arguments for database settings and optionally one config file for
+  shared settings
 
 ## Migrations
 

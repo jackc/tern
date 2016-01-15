@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/jackc/pgx"
@@ -474,7 +477,31 @@ func LoadConfig() (*Config, error) {
 }
 
 func appendConfigFromFile(config *Config, path string) error {
-	file, err := ini.LoadFile(path)
+	env := make(map[string]string)
+	for _, s := range os.Environ() {
+		parts := strings.SplitN(s, "=", 2)
+		env[parts[0]] = parts[1]
+	}
+
+	fileBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	confTemplate, err := template.New("conf").Parse(string(fileBytes))
+	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	err = confTemplate.Execute(&buf, map[string]interface{}{
+		"env": env,
+	})
+	if err != nil {
+		return err
+	}
+
+	file, err := ini.Load(&buf)
 	if err != nil {
 		return err
 	}
