@@ -19,7 +19,7 @@ import (
 	"github.com/vaughan0/go-ini"
 )
 
-const VERSION = "1.6.1"
+const VERSION = "1.7.0"
 
 var defaultConf = `[database]
 # host is required (network host or path to Unix domain socket)

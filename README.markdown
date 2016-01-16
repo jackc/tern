@@ -227,7 +227,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
-## Unreleased
+## 1.7.0 (January 17, 2016)
 
 * Add SSH tunnel support
 
