@@ -285,3 +285,42 @@ version:  0 of 2`
 		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
 	}
 }
+
+func TestSSHTunnel(t *testing.T) {
+	host := os.Getenv("TERN_HOST")
+	if host == "" {
+		t.Skip("Skipping SSH Tunnel test due to missing TERN_HOST environment variable")
+	}
+
+	user := os.Getenv("TERN_USER")
+	if user == "" {
+		t.Skip("Skipping SSH Tunnel test due to missing TERN_USER environment variable")
+	}
+
+	password := os.Getenv("TERN_PASSWORD")
+	if password == "" {
+		t.Skip("Skipping SSH Tunnel test due to missing TERN_PASSWORD environment variable")
+	}
+
+	database := os.Getenv("TERN_DATABASE")
+	if database == "" {
+		t.Skip("Skipping SSH Tunnel test due to missing TERN_DATABASE environment variable")
+	}
+
+	// Ensure database is in clean state
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+
+	output := tern(t, "status",
+		"-m", "testdata",
+		"--ssh-host", "localhost",
+		"--host", host,
+		"--user", user,
+		"--password", password,
+		"--database", database,
+	)
+	expected := `status:   migration(s) pending
+version:  0 of 2`
+	if !strings.Contains(output, expected) {
+		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
+	}
+}

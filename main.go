@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -38,6 +39,15 @@ var defaultConf = `[database]
 # verify-full - require SSL connection
 # sslmode = prefer
 
+# Proxy the above database connection via SSH
+# [ssh-tunnel]
+# host =
+# port = 22
+# user defaults to OS user
+# user =
+# password is not required if using SSH agent authentication
+# password =
+
 [data]
 # Any fields in the data section are available in migration templates
 # prefix = foo
@@ -65,23 +75,30 @@ var newMigrationText = `-- Write your migrate up statements here
 `
 
 type Config struct {
-	ConnConfig   pgx.ConnConfig
-	SslMode      string
-	VersionTable string
-	Data         map[string]interface{}
+	ConnConfig    pgx.ConnConfig
+	SslMode       string
+	VersionTable  string
+	Data          map[string]interface{}
+	SSHConnConfig SSHConnConfig
 }
 
 var cliOptions struct {
 	destinationVersion string
 	migrationsPath     string
 	configPath         string
-	host               string
-	port               uint16
-	user               string
-	password           string
-	database           string
-	sslmode            string
-	versionTable       string
+
+	host         string
+	port         uint16
+	user         string
+	password     string
+	database     string
+	sslmode      string
+	versionTable string
+
+	sshHost     string
+	sshPort     string
+	sshUser     string
+	sshPassword string
 }
 
 func (c *Config) Validate() error {
@@ -104,6 +121,31 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) Connect() (*pgx.Conn, error) {
+	if c.SSHConnConfig.Host != "" {
+		client, err := NewSSHClient(&c.SSHConnConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		// Normally pgx handles setting default port to 5432, but since the SSH
+		// tunnel is making the connection handle that here.
+		if c.ConnConfig.Port == 0 {
+			c.ConnConfig.Port = 5432
+		}
+
+		tunnelServer, err := NewSSHTunnelServer(client, c.ConnConfig.Host, strconv.Itoa(int(c.ConnConfig.Port)))
+		if err != nil {
+			return nil, err
+		}
+
+		c.ConnConfig.Host = tunnelServer.Host()
+		if port, err := strconv.ParseUint(tunnelServer.Port(), 10, 16); err == nil {
+			c.ConnConfig.Port = uint16(port)
+		} else {
+			return nil, err
+		}
+	}
+
 	// If sslmode was set in config file or cli argument, set it in the
 	// environment so we can use pgx.ParseEnvLibpq to use pgx's built-in
 	// functionality.
@@ -205,6 +247,7 @@ The word "last":
 func addConfigFlagsToCommand(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
 	cmd.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
+
 	cmd.Flags().StringVarP(&cliOptions.host, "host", "", "", "database host")
 	cmd.Flags().Uint16VarP(&cliOptions.port, "port", "", 0, "database port")
 	cmd.Flags().StringVarP(&cliOptions.user, "user", "", "", "database user")
@@ -213,6 +256,10 @@ func addConfigFlagsToCommand(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&cliOptions.sslmode, "sslmode", "", "", "SSL mode")
 	cmd.Flags().StringVarP(&cliOptions.versionTable, "version-table", "", "schema_version", "version table name")
 
+	cmd.Flags().StringVarP(&cliOptions.sshHost, "ssh-host", "", "", "SSH tunnel host")
+	cmd.Flags().StringVarP(&cliOptions.sshPort, "ssh-port", "", "ssh", "SSH tunnel port")
+	cmd.Flags().StringVarP(&cliOptions.sshUser, "ssh-user", "", "", "SSH tunnel user (default is OS user")
+	cmd.Flags().StringVarP(&cliOptions.sshPassword, "ssh-password", "", "", "SSH tunnel password (unneeded if using SSH agent authentication)")
 }
 
 func Init(cmd *cobra.Command, args []string) {
@@ -473,6 +520,18 @@ func LoadConfig() (*Config, error) {
 
 	appendConfigFromCLIArgs(config)
 
+	if config.SSHConnConfig.User == "" {
+		user, err := user.Current()
+		if err != nil {
+			return nil, err
+		}
+		config.SSHConnConfig.User = user.Username
+	}
+
+	if config.SSHConnConfig.Port == "" {
+		config.SSHConnConfig.Port = "ssh"
+	}
+
 	return config, nil
 }
 
@@ -551,6 +610,22 @@ func appendConfigFromFile(config *Config, path string) error {
 		config.Data[key] = value
 	}
 
+	if host, ok := file.Get("ssh-tunnel", "host"); ok {
+		config.SSHConnConfig.Host = host
+	}
+
+	if port, ok := file.Get("ssh-tunnel", "port"); ok {
+		config.SSHConnConfig.Port = port
+	}
+
+	if user, ok := file.Get("ssh-tunnel", "user"); ok {
+		config.SSHConnConfig.User = user
+	}
+
+	if password, ok := file.Get("ssh-tunnel", "password"); ok {
+		config.SSHConnConfig.Password = password
+	}
+
 	return nil
 }
 
@@ -575,5 +650,18 @@ func appendConfigFromCLIArgs(config *Config) {
 	}
 	if cliOptions.versionTable != "" {
 		config.VersionTable = cliOptions.versionTable
+	}
+
+	if cliOptions.sshHost != "" {
+		config.SSHConnConfig.Host = cliOptions.sshHost
+	}
+	if cliOptions.sshPort != "" {
+		config.SSHConnConfig.Port = cliOptions.sshPort
+	}
+	if cliOptions.sshUser != "" {
+		config.SSHConnConfig.User = cliOptions.sshUser
+	}
+	if cliOptions.sshPassword != "" {
+		config.SSHConnConfig.Password = cliOptions.sshPassword
 	}
 }
