@@ -19,7 +19,7 @@ import (
 	"github.com/vaughan0/go-ini"
 )
 
-const VERSION = "1.7.0"
+const VERSION = "1.7.1"
 
 var defaultConf = `[database]
 # host is required (network host or path to Unix domain socket)
@@ -127,23 +127,7 @@ func (c *Config) Connect() (*pgx.Conn, error) {
 			return nil, err
 		}
 
-		// Normally pgx handles setting default port to 5432, but since the SSH
-		// tunnel is making the connection handle that here.
-		if c.ConnConfig.Port == 0 {
-			c.ConnConfig.Port = 5432
-		}
-
-		tunnelServer, err := NewSSHTunnelServer(client, c.ConnConfig.Host, strconv.Itoa(int(c.ConnConfig.Port)))
-		if err != nil {
-			return nil, err
-		}
-
-		c.ConnConfig.Host = tunnelServer.Host()
-		if port, err := strconv.ParseUint(tunnelServer.Port(), 10, 16); err == nil {
-			c.ConnConfig.Port = uint16(port)
-		} else {
-			return nil, err
-		}
+		c.ConnConfig.Dial = client.Dial
 	}
 
 	// If sslmode was set in config file or cli argument, set it in the

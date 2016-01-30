@@ -227,6 +227,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.7.1 (January 30, 2016)
+
+* Simplify SSH tunnel code so it does not listen on localhost
+
 ## 1.7.0 (January 17, 2016)
 
 * Add SSH tunnel support
