@@ -1,11 +1,15 @@
 {
 	"ImportPath": "github.com/jackc/tern",
-	"GoVersion": "go1.5.3",
+	"GoVersion": "go1.6",
 	"Deps": [
 		{
+			"ImportPath": "github.com/inconshreveable/mousetrap",
+			"Rev": "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
+		},
+		{
 			"ImportPath": "github.com/jackc/pgx",
-			"Comment": "v2.7.1-20-g9f9a977",
-			"Rev": "9f9a9779ac794e885f6fbb04935724f03149f092"
+			"Comment": "v2.7.1-34-gc6b6d7b",
+			"Rev": "c6b6d7bad715f16cbb46e73356541fa4dd1f9333"
 		},
 		{
 			"ImportPath": "github.com/spf13/cobra",
@@ -21,11 +25,15 @@
 		},
 		{
 			"ImportPath": "golang.org/x/crypto/curve25519",
-			"Rev": "3760e016850398b85094c4c99e955b8c3dea5711"
+			"Rev": "7b85b097bf7527677d54d3220065e966a0e3b613"
 		},
 		{
 			"ImportPath": "golang.org/x/crypto/ssh",
-			"Rev": "3760e016850398b85094c4c99e955b8c3dea5711"
+			"Rev": "7b85b097bf7527677d54d3220065e966a0e3b613"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/ssh/agent",
+			"Rev": "7b85b097bf7527677d54d3220065e966a0e3b613"
 		}
 	]
 }
