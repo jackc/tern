@@ -48,16 +48,26 @@ type Migration struct {
 	DownSQL  string
 }
 
+type MigratorOptions struct {
+	// DisableTx causes the Migrator not to run migrations in a transaction.
+	DisableTx bool
+}
+
 type Migrator struct {
 	conn         *pgx.Conn
 	versionTable string
+	options      *MigratorOptions
 	Migrations   []*Migration
 	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and SQL
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
 func NewMigrator(conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	m = &Migrator{conn: conn, versionTable: versionTable}
+	return NewMigratorEx(conn, versionTable, &MigratorOptions{})
+}
+
+func NewMigratorEx(conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
+	m = &Migrator{conn: conn, versionTable: versionTable, options: opts}
 	err = m.ensureSchemaVersionTableExists()
 	m.Migrations = make([]*Migration, 0)
 	m.Data = make(map[string]interface{})
@@ -249,11 +259,14 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 			}
 		}
 
-		tx, err := m.conn.Begin()
-		if err != nil {
-			return err
+		var tx *pgx.Tx
+		if !m.options.DisableTx {
+			tx, err = m.conn.Begin()
+			if err != nil {
+				return err
+			}
+			defer tx.Rollback()
 		}
-		defer tx.Rollback()
 
 		// Fire on start callback
 		if m.OnStart != nil {
@@ -275,9 +288,11 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 			return err
 		}
 
-		err = tx.Commit()
-		if err != nil {
-			return err
+		if !m.options.DisableTx {
+			err = tx.Commit()
+			if err != nil {
+				return err
+			}
 		}
 
 		currentVersion = currentVersion + direction
