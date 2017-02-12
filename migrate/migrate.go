@@ -116,7 +116,7 @@ func FindMigrations(path string) ([]string, error) {
 func (m *Migrator) LoadMigrations(path string) error {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
-	mainTmpl := template.New("main")
+	loader := m.newMigrationLoader()
 	sharedPaths, err := filepath.Glob(filepath.Join(path, "*", "*.sql"))
 	if err != nil {
 		return err
@@ -129,7 +129,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 		}
 
 		name := strings.Replace(p, path+string(filepath.Separator), "", 1)
-		_, err = mainTmpl.New(name).Parse(string(body))
+		loader.loadShared(name, body)
 		if err != nil {
 			return err
 		}
@@ -145,40 +145,57 @@ func (m *Migrator) LoadMigrations(path string) error {
 	}
 
 	for _, p := range paths {
-		body, err := ioutil.ReadFile(p)
-		if err != nil {
+		if body, err := ioutil.ReadFile(p); err != nil {
+			return err
+		} else if err := loader.load(p, body); err != nil {
 			return err
 		}
-
-		pieces := strings.SplitN(string(body), "---- create above / drop below ----", 2)
-		var upSQL, downSQL string
-		upSQL = strings.TrimSpace(pieces[0])
-		upSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" up"), upSQL)
-		if err != nil {
-			return err
-		}
-		if len(pieces) == 2 {
-			downSQL = strings.TrimSpace(pieces[1])
-			downSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" down"), downSQL)
-			if err != nil {
-				return err
-			}
-		}
-
-		m.AppendMigration(filepath.Base(p), upSQL, downSQL)
 	}
 
 	return nil
 }
 
-func (m *Migrator) evalMigration(tmpl *template.Template, sql string) (string, error) {
-	tmpl, err := tmpl.Parse(sql)
+type migrationLoader struct {
+	root *template.Template
+	m    * Migrator
+}
+
+func (m * Migrator) newMigrationLoader() (migrationLoader) {
+	return migrationLoader{ root: template.New("main"), m: m}
+}
+
+func (ml migrationLoader) loadShared(name string, body []byte) (err error) {
+	_, err = ml.root.New(name).Parse(string(body))
+	return
+}
+
+func (ml migrationLoader) load(path string, body []byte) (err error) {
+	pieces := strings.SplitN(string(body), "---- create above / drop below ----", 2)
+	var upSQL, downSQL string
+	upSQL = strings.TrimSpace(pieces[0])
+	upSQL, err = ml.evalMigration(filepath.Base(path)+" up", upSQL)
+	if err != nil {
+		return
+	}
+	if len(pieces) == 2 {
+		downSQL = strings.TrimSpace(pieces[1])
+		downSQL, err = ml.evalMigration(filepath.Base(path)+" down", downSQL)
+		if err != nil {
+			return
+		}
+	}
+	ml.m.AppendMigration(filepath.Base(path), upSQL, downSQL)
+	return
+}
+
+func (ml *migrationLoader) evalMigration(name, sql string) (string, error) {
+	tmpl, err := ml.root.New(name).Parse(sql)
 	if err != nil {
 		return "", err
 	}
 
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, m.Data)
+	err = tmpl.Execute(&buf, ml.m.Data)
 	if err != nil {
 		return "", err
 	}
