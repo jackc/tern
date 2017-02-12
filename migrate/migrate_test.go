@@ -281,6 +281,33 @@ func (s *MigrateSuite) TestMigrateToIrreversible(c *C) {
 	c.Assert(err, ErrorMatches, "Irreversible migration: 1 - Foo")
 }
 
+func (s *MigrateSuite) TestMigrateToDisableTx(c *C) {
+	m, err := migrate.NewMigratorEx(s.conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	c.Assert(err, IsNil)
+	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
+	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
+	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
+
+	tx, err := s.conn.Begin()
+	c.Assert(err, IsNil)
+
+	err = m.MigrateTo(3)
+	c.Assert(err, IsNil)
+	currentVersion := s.currentVersion(c)
+	c.Assert(currentVersion, Equals, int32(3))
+	c.Assert(s.tableExists(c, "t1"), Equals, true)
+	c.Assert(s.tableExists(c, "t2"), Equals, true)
+	c.Assert(s.tableExists(c, "t3"), Equals, true)
+
+	err = tx.Rollback()
+	c.Assert(err, IsNil)
+	currentVersion = s.currentVersion(c)
+	c.Assert(currentVersion, Equals, int32(0))
+	c.Assert(s.tableExists(c, "t1"), Equals, false)
+	c.Assert(s.tableExists(c, "t2"), Equals, false)
+	c.Assert(s.tableExists(c, "t3"), Equals, false)
+}
+
 func Example_OnStartMigrationProgressLogging() {
 	conn, err := pgx.Connect(*defaultConnectionParameters)
 	if err != nil {
