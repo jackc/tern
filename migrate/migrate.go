@@ -48,41 +48,29 @@ type Migration struct {
 	DownSQL  string
 }
 
-type migrationOptions struct {
+type MigratorOptions struct {
+	// DisableTx causes the Migrator not to run migrations in a transaction.
 	DisableTx bool
-}
-
-type MigratorOption func(*migrationOptions)
-
-// DisableTx prevenets the migrator from setting up a transaction.
-func DisableTx(mo *migrationOptions) {
-	mo.DisableTx = true
 }
 
 type Migrator struct {
 	conn         *pgx.Conn
 	versionTable string
-	options      migrationOptions
+	options      *MigratorOptions
 	Migrations   []*Migration
 	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and SQL
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
 func NewMigrator(conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	m = &Migrator{conn: conn, versionTable: versionTable}
+	return NewMigratorEx(conn, versionTable, &MigratorOptions{})
+}
+
+func NewMigratorEx(conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
+	m = &Migrator{conn: conn, versionTable: versionTable, options: opts}
 	err = m.ensureSchemaVersionTableExists()
 	m.Migrations = make([]*Migration, 0)
 	m.Data = make(map[string]interface{})
-	m.options = migrationOptions{DisableTx: false }
-	return
-}
-
-func NewMigratorEx(conn *pgx.Conn, versionTable string, opts ... MigratorOption) (m *Migrator, err error) {
-	if m, err = NewMigrator(conn, versionTable); err == nil {
-		for _, opt := range opts {
-			opt(&m.options)
-		}
-	}
 	return
 }
 
@@ -272,7 +260,7 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 		}
 
 		var tx *pgx.Tx
-		if ! m.options.DisableTx {
+		if !m.options.DisableTx {
 			tx, err = m.conn.Begin()
 			if err != nil {
 				return err
@@ -300,7 +288,7 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 			return err
 		}
 
-		if ! m.options.DisableTx {
+		if !m.options.DisableTx {
 			err = tx.Commit()
 			if err != nil {
 				return err
