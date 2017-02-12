@@ -113,10 +113,84 @@ func FindMigrations(path string) ([]string, error) {
 	return paths, nil
 }
 
+
+// MigrationDir is a function that follows the semantics defined by the go-bindata AssetDir function:
+// AssetDir returns the file names below a certain
+// returns the file names below a certain
+// directory embedded in the file by go-bindata.
+// For example if you run go-bindata on data/... and data contains the
+// following hierarchy:
+//     data/
+//       foo.txt
+//       img/
+//         a.png
+//         b.png
+// then AssetDir("data") would return []string{"foo.txt", "img"}
+// AssetDir("data/img") would return []string{"a.png", "b.png"}
+// AssetDir("foo.txt") and AssetDir("notexist") would return an error
+// AssetDir("") will return []string{"data"}.
+type MigrationDir func (string) ([]string, error)
+
+// MigrationAsset is a function that follows the semantics defined by the go-bindata Asset function:
+// Asset loads and returns the asset for the given name.
+// It returns an error if the asset could not be found or
+// could not be loaded.
+type MigrationAsset func (string) ([]byte, error)
+
+// recursive function to harvest the shared sql templates.
+func traverseShared(l migrationLoader, dir MigrationDir, asset MigrationAsset, cwd string, sps []string) error {
+	for _, name := range sps {
+		filePath := filepath.Join(cwd, name)
+		if sharedDirs, err := dir(name); err == nil {
+			traverseShared(l, dir, asset, filePath, sharedDirs)
+		} else if body, err := asset(filePath); err != nil {
+			return err
+		} else if err := l.loadShared(name, body); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type kv struct {
+	key string
+	value []byte
+}
+
+func (m * Migrator) LoadMigrationsFromGoBindata(base string, dir MigrationDir, asset MigrationAsset) error {
+	if as, err := dir(base); err != nil {
+		return err
+	} else {
+		toResolve := []kv{}
+		loader := m.newMigrationLoader(base+"/")
+		for _, name := range as {
+			filePath := filepath.Join(base, name)
+			// first check if the entry is a subdirectory, if it is harvest shared sql
+			if shared, err := dir(filePath); err == nil {
+				if err := traverseShared(loader, dir, asset, filePath, shared); err != nil {
+					return err
+				}
+				// otherwise it must be a migration at the root, in which case defer processing it till all
+				// shared sql has been loaded
+			} else if body, err := asset(filePath); err != nil {
+				return err
+			} else {
+				toResolve = append(toResolve, kv{ key: name, value: body})
+			}
+		}
+		// now resolve the actual migrations
+		for k, v := range toResolve {
+			if err := loader.load(k, v); err != nil { return err }
+		}
+		return nil
+	}
+}
+
 func (m *Migrator) LoadMigrations(path string) error {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
-	mainTmpl := template.New("main")
+	loader := m.newMigrationLoader(path+string(filepath.Separator))
+
 	sharedPaths, err := filepath.Glob(filepath.Join(path, "*", "*.sql"))
 	if err != nil {
 		return err
@@ -127,9 +201,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 		if err != nil {
 			return err
 		}
-
-		name := strings.Replace(p, path+string(filepath.Separator), "", 1)
-		_, err = mainTmpl.New(name).Parse(string(body))
+		loader.loadShared(p, body)
 		if err != nil {
 			return err
 		}
@@ -145,40 +217,60 @@ func (m *Migrator) LoadMigrations(path string) error {
 	}
 
 	for _, p := range paths {
-		body, err := ioutil.ReadFile(p)
-		if err != nil {
+		if body, err := ioutil.ReadFile(p); err != nil {
+			return err
+		} else if err := loader.load(p, body); err != nil {
 			return err
 		}
-
-		pieces := strings.SplitN(string(body), "---- create above / drop below ----", 2)
-		var upSQL, downSQL string
-		upSQL = strings.TrimSpace(pieces[0])
-		upSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" up"), upSQL)
-		if err != nil {
-			return err
-		}
-		if len(pieces) == 2 {
-			downSQL = strings.TrimSpace(pieces[1])
-			downSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" down"), downSQL)
-			if err != nil {
-				return err
-			}
-		}
-
-		m.AppendMigration(filepath.Base(p), upSQL, downSQL)
 	}
 
 	return nil
 }
 
-func (m *Migrator) evalMigration(tmpl *template.Template, sql string) (string, error) {
-	tmpl, err := tmpl.Parse(sql)
+type migrationLoader struct {
+	root *template.Template
+	m    * Migrator
+	basePart string
+}
+
+// bp is the path to remove for adjusting the names of the template files.
+func (m * Migrator) newMigrationLoader(bp string) (migrationLoader) {
+	return migrationLoader{ root: template.New("main"), m: m, basePart: bp}
+}
+
+func (ml migrationLoader) loadShared(filePath string, body []byte) (err error) {
+	name := strings.Replace(filePath, ml.basePart, "", 1)
+	_, err = ml.root.New(name).Parse(string(body))
+	return
+}
+
+func (ml migrationLoader) load(path string, body []byte) (err error) {
+	pieces := strings.SplitN(string(body), "---- create above / drop below ----", 2)
+	var upSQL, downSQL string
+	upSQL = strings.TrimSpace(pieces[0])
+	upSQL, err = ml.evalMigration(filepath.Base(path)+" up", upSQL)
+	if err != nil {
+		return
+	}
+	if len(pieces) == 2 {
+		downSQL = strings.TrimSpace(pieces[1])
+		downSQL, err = ml.evalMigration(filepath.Base(path)+" down", downSQL)
+		if err != nil {
+			return
+		}
+	}
+	ml.m.AppendMigration(filepath.Base(path), upSQL, downSQL)
+	return
+}
+
+func (ml *migrationLoader) evalMigration(name, sql string) (string, error) {
+	tmpl, err := ml.root.New(name).Parse(sql)
 	if err != nil {
 		return "", err
 	}
 
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, m.Data)
+	err = tmpl.Execute(&buf, ml.m.Data)
 	if err != nil {
 		return "", err
 	}
