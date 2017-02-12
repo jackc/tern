@@ -116,7 +116,8 @@ func FindMigrations(path string) ([]string, error) {
 func (m *Migrator) LoadMigrations(path string) error {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
-	loader := m.newMigrationLoader()
+	loader := m.newMigrationLoader(path+string(filepath.Separator))
+
 	sharedPaths, err := filepath.Glob(filepath.Join(path, "*", "*.sql"))
 	if err != nil {
 		return err
@@ -127,9 +128,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 		if err != nil {
 			return err
 		}
-
-		name := strings.Replace(p, path+string(filepath.Separator), "", 1)
-		loader.loadShared(name, body)
+		loader.loadShared(p, body)
 		if err != nil {
 			return err
 		}
@@ -158,13 +157,16 @@ func (m *Migrator) LoadMigrations(path string) error {
 type migrationLoader struct {
 	root *template.Template
 	m    * Migrator
+	basePart string
 }
 
-func (m * Migrator) newMigrationLoader() (migrationLoader) {
-	return migrationLoader{ root: template.New("main"), m: m}
+// bp is the path to remove for adjusting the names of the template files.
+func (m * Migrator) newMigrationLoader(bp string) (migrationLoader) {
+	return migrationLoader{ root: template.New("main"), m: m, basePart: bp}
 }
 
-func (ml migrationLoader) loadShared(name string, body []byte) (err error) {
+func (ml migrationLoader) loadShared(filePath string, body []byte) (err error) {
+	name := strings.Replace(filePath, ml.basePart, "", 1)
 	_, err = ml.root.New(name).Parse(string(body))
 	return
 }
