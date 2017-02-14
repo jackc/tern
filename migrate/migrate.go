@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"os"
 )
 
 var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
@@ -51,6 +52,8 @@ type Migration struct {
 type MigratorOptions struct {
 	// DisableTx causes the Migrator not to run migrations in a transaction.
 	DisableTx bool
+	// MigratorFS is the interface used for collecting the migrations.
+	MigratorFS MigratorFS
 }
 
 type Migrator struct {
@@ -63,7 +66,7 @@ type Migrator struct {
 }
 
 func NewMigrator(conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	return NewMigratorEx(conn, versionTable, &MigratorOptions{})
+	return NewMigratorEx(conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}})
 }
 
 func NewMigratorEx(conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
@@ -74,10 +77,30 @@ func NewMigratorEx(conn *pgx.Conn, versionTable string, opts *MigratorOptions) (
 	return
 }
 
-func FindMigrations(path string) ([]string, error) {
+type MigratorFS interface {
+	ReadDir(dirname string) ([]os.FileInfo, error)
+	ReadFile(filename string) ([]byte, error)
+	Glob(pattern string) (matches []string, err error)
+}
+
+type defaultMigratorFS struct {}
+
+func (defaultMigratorFS) ReadDir(dirname string) ([]os.FileInfo, error) {
+	return ioutil.ReadDir(dirname)
+}
+
+func (defaultMigratorFS) ReadFile(filename string) ([]byte, error) {
+	return ioutil.ReadFile(filename)
+}
+
+func (defaultMigratorFS) Glob(pattern string) ([]string, error) {
+	return filepath.Glob(pattern)
+}
+
+func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
-	fileInfos, err := ioutil.ReadDir(path)
+	fileInfos, err := fs.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
@@ -113,17 +136,21 @@ func FindMigrations(path string) ([]string, error) {
 	return paths, nil
 }
 
+func FindMigrations(path string) ([]string, error) {
+	return FindMigrationsEx(path, defaultMigratorFS{})
+}
+
 func (m *Migrator) LoadMigrations(path string) error {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
 	mainTmpl := template.New("main")
-	sharedPaths, err := filepath.Glob(filepath.Join(path, "*", "*.sql"))
+	sharedPaths, err := m.options.MigratorFS.Glob(filepath.Join(path, "*", "*.sql"))
 	if err != nil {
 		return err
 	}
 
 	for _, p := range sharedPaths {
-		body, err := ioutil.ReadFile(p)
+		body, err := m.options.MigratorFS.ReadFile(p)
 		if err != nil {
 			return err
 		}
@@ -135,7 +162,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 		}
 	}
 
-	paths, err := FindMigrations(path)
+	paths, err := FindMigrationsEx(path, m.options.MigratorFS)
 	if err != nil {
 		return err
 	}
@@ -145,7 +172,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 	}
 
 	for _, p := range paths {
-		body, err := ioutil.ReadFile(p)
+		body, err := m.options.MigratorFS.ReadFile(p)
 		if err != nil {
 			return err
 		}

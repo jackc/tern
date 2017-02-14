@@ -25,3 +25,5 @@ migrate/connection_settings_test.go
 testdata/tern.conf
 /tern
 /tmp
+
+.idea/*
