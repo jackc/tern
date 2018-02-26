@@ -1,6 +1,7 @@
 {
 	"ImportPath": "github.com/jackc/tern",
-	"GoVersion": "go1.6",
+	"GoVersion": "go1.10",
+	"GodepVersion": "v79",
 	"Deps": [
 		{
 			"ImportPath": "github.com/inconshreveable/mousetrap",
