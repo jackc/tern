@@ -180,25 +180,25 @@ Destination migration version can be one of the following value types:
 
 An integer:
   Migrate to a specific migration.
-  e.g. tern -d 42
+  e.g. tern migrate -d 42
 
 "+" and an integer:
   Migrate forward N steps.
-  e.g. tern -d +3
+  e.g. tern migrate -d +3
 
 "-" and an integer:
   Migrate backward N steps.
-  e.g. tern -d -2
+  e.g. tern migrate -d -2
 
 "-+" and an integer:
   Redo previous N steps (migrate backward N steps then forward N steps).
-  e.g. tern -d -+1
+  e.g. tern migrate -d -+1
 
 The word "last":
   Migrate to the most recent migration. This is the default value, so it is
   never needed to specify directly.
-  e.g. tern
-  e.g. tern -d last
+  e.g. tern migrate
+  e.g. tern migrate -d last
 		`,
 		Run: Migrate,
 	}
