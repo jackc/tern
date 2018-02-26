@@ -227,6 +227,13 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.8.0 (February 26, 2018)
+
+* Update to latest version of pgx (PostgreSQL driver)
+* Support PGSSLROOTCERT
+* Fix typos and internal cleanup
+* Refactor internals for easier embedding (hsyed)
+
 ## 1.7.1 (January 30, 2016)
 
 * Simplify SSH tunnel code so it does not listen on localhost
