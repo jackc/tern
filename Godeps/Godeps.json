@@ -9,8 +9,8 @@
 		},
 		{
 			"ImportPath": "github.com/jackc/pgx",
-			"Comment": "v2.7.1-34-gc6b6d7b",
-			"Rev": "c6b6d7bad715f16cbb46e73356541fa4dd1f9333"
+			"Comment": "v3.1.0-18-g55ca9db",
+			"Rev": "55ca9db5d578065aba99d32a392d8b3d5444b494"
 		},
 		{
 			"ImportPath": "github.com/spf13/cobra",
@@ -35,6 +35,36 @@
 		{
 			"ImportPath": "golang.org/x/crypto/ssh/agent",
 			"Rev": "7b85b097bf7527677d54d3220065e966a0e3b613"
+		},
+		{
+			"ImportPath": "github.com/jackc/pgx/internal/sanitize",
+			"Comment": "v3.1.0-18-g55ca9db",
+			"Rev": "55ca9db5d578065aba99d32a392d8b3d5444b494"
+		},
+		{
+			"ImportPath": "github.com/jackc/pgx/pgio",
+			"Comment": "v3.1.0-18-g55ca9db",
+			"Rev": "55ca9db5d578065aba99d32a392d8b3d5444b494"
+		},
+		{
+			"ImportPath": "github.com/jackc/pgx/pgproto3",
+			"Comment": "v3.1.0-18-g55ca9db",
+			"Rev": "55ca9db5d578065aba99d32a392d8b3d5444b494"
+		},
+		{
+			"ImportPath": "github.com/jackc/pgx/pgtype",
+			"Comment": "v3.1.0-18-g55ca9db",
+			"Rev": "55ca9db5d578065aba99d32a392d8b3d5444b494"
+		},
+		{
+			"ImportPath": "github.com/pkg/errors",
+			"Comment": "v0.8.0-7-gf15c970",
+			"Rev": "f15c970de5b76fac0b59abb32d62c17cc7bed265"
+		},
+		{
+			"ImportPath": "github.com/jackc/pgx/chunkreader",
+			"Comment": "v3.1.0-18-g55ca9db",
+			"Rev": "55ca9db5d578065aba99d32a392d8b3d5444b494"
 		}
 	]
 }

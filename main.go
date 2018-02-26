@@ -19,7 +19,7 @@ import (
 	"github.com/vaughan0/go-ini"
 )
 
-const VERSION = "1.7.1"
+const VERSION = "1.8.0.pre"
 
 var defaultConf = `[database]
 # host is required (network host or path to Unix domain socket)
@@ -29,6 +29,7 @@ var defaultConf = `[database]
 # database =
 # user defaults to OS user
 # user =
+# password =
 # version_table = schema_version
 #
 # sslmode generally matches the behavior described in:
@@ -38,6 +39,9 @@ var defaultConf = `[database]
 # prefer - on trusted networks where security is not required
 # verify-full - require SSL connection
 # sslmode = prefer
+#
+# sslrootcert is generally used with sslmode=verify-full
+# sslrootcert = /path/to/root/ca
 
 # Proxy the above database connection via SSH
 # [ssh-tunnel]
@@ -77,6 +81,7 @@ var newMigrationText = `-- Write your migrate up statements here
 type Config struct {
 	ConnConfig    pgx.ConnConfig
 	SslMode       string
+	SslRootCert   string
 	VersionTable  string
 	Data          map[string]interface{}
 	SSHConnConfig SSHConnConfig
@@ -93,6 +98,7 @@ var cliOptions struct {
 	password     string
 	database     string
 	sslmode      string
+	sslrootcert  string
 	versionTable string
 
 	sshHost     string
@@ -139,6 +145,9 @@ func (c *Config) Connect() (*pgx.Conn, error) {
 			return nil, err
 		}
 		if err := os.Setenv("PGSSLMODE", c.SslMode); err != nil {
+			return nil, err
+		}
+		if err := os.Setenv("PGSSLROOTCERT", c.SslRootCert); err != nil {
 			return nil, err
 		}
 
@@ -238,6 +247,7 @@ func addConfigFlagsToCommand(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&cliOptions.password, "password", "", "", "database password")
 	cmd.Flags().StringVarP(&cliOptions.database, "database", "", "", "database name")
 	cmd.Flags().StringVarP(&cliOptions.sslmode, "sslmode", "", "", "SSL mode")
+	cmd.Flags().StringVarP(&cliOptions.sslrootcert, "sslrootcert", "", "", "SSL root certificate")
 	cmd.Flags().StringVarP(&cliOptions.versionTable, "version-table", "", "schema_version", "version table name")
 
 	cmd.Flags().StringVarP(&cliOptions.sshHost, "ssh-host", "", "", "SSH tunnel host")
@@ -589,6 +599,10 @@ func appendConfigFromFile(config *Config, path string) error {
 		config.SslMode = sslmode
 	}
 
+	if sslrootcert, ok := file.Get("database", "sslrootcert"); ok {
+		config.SslRootCert = sslrootcert
+	}
+
 	config.Data = make(map[string]interface{})
 	for key, value := range file["data"] {
 		config.Data[key] = value
@@ -631,6 +645,9 @@ func appendConfigFromCLIArgs(config *Config) {
 	}
 	if cliOptions.sslmode != "" {
 		config.SslMode = cliOptions.sslmode
+	}
+	if cliOptions.sslrootcert != "" {
+		config.SslRootCert = cliOptions.sslrootcert
 	}
 	if cliOptions.versionTable != "" {
 		config.VersionTable = cliOptions.versionTable

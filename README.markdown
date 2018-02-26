@@ -30,9 +30,9 @@ config file. See the sample directory for an example.
 
 Database connection settings can be specified via the standard PostgreSQL
 environment variables (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, and
-PGSSLMODE), via program arguments, or in a config file. By default tern will
-look in the current directory for the config file tern.conf and the
-migrations.
+PGSSLMODE, PGSSLROOTCERT), via program arguments, or in a config file. By
+default tern will look in the current directory for the config file tern.conf
+and the migrations.
 
 The `tern.conf` file is stored in the `ini` format with two sections,
 `database` and `data`. The `database` section contains settings for connection
