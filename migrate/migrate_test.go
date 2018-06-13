@@ -165,7 +165,7 @@ func (s *MigrateSuite) TestLoadMigrationsNoForward(c *C) {
 
 	m.Data = map[string]interface{}{"prefix": "foo"}
 	err = m.LoadMigrations("testdata/noforward")
-	c.Assert(err, IsNil)
+	c.Assert(err, Equals, migrate.ErrNoFwMigration)
 }
 
 func (s *MigrateSuite) TestMigrate(c *C) {

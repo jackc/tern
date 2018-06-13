@@ -17,6 +17,8 @@ import (
 
 var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
 
+var ErrNoFwMigration = errors.Errorf("no sql in forward migration step")
+
 type BadVersionError string
 
 func (e BadVersionError) Error() string {
@@ -199,7 +201,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 				}
 			}
 			if !containsSQL {
-				return errors.Errorf("no sql in forward migration step")
+				return ErrNoFwMigration
 			}
 		}
 		if len(pieces) == 2 {
