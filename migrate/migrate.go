@@ -194,8 +194,9 @@ func (m *Migrator) LoadMigrations(path string) error {
 			containsSQL := false
 			for _, v := range strings.Split(upSQL, "\n") {
 				// Only account for regular single line comment.
-				if len(strings.TrimSpace(v)) != 0 &&
-					!strings.HasPrefix(v, "--") {
+				cleanString := strings.TrimSpace(v)
+				if len(cleanString) != 0 &&
+					!strings.HasPrefix(cleanString, "--") {
 					containsSQL = true
 					break
 				}
