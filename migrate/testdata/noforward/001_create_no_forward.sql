@@ -1,4 +1,4 @@
--- no SLQ here
+-- no SQL here
 -- nor here, just all comments.
  -- comment with space before
  
