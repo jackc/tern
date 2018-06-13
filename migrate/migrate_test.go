@@ -53,7 +53,7 @@ func (s *MigrateSuite) tableExists(c *C, tableName string) bool {
 
 func (s *MigrateSuite) createEmptyMigrator(c *C) *migrate.Migrator {
 	var err error
-	m, err := migrate.NewMigrator(s.conn, versionTable, false)
+	m, err := migrate.NewMigrator(s.conn, versionTable)
 	c.Assert(err, IsNil)
 	return m
 }
@@ -78,7 +78,7 @@ func (s *MigrateSuite) TestNewMigrator(c *C) {
 	var err error
 
 	// Initial run
-	m, err = migrate.NewMigrator(s.conn, versionTable, false)
+	m, err = migrate.NewMigrator(s.conn, versionTable)
 	c.Assert(err, IsNil)
 
 	// Creates version table
@@ -86,7 +86,7 @@ func (s *MigrateSuite) TestNewMigrator(c *C) {
 	c.Assert(schemaVersionExists, Equals, true)
 
 	// Succeeds when version table is already created
-	m, err = migrate.NewMigrator(s.conn, versionTable, false)
+	m, err = migrate.NewMigrator(s.conn, versionTable)
 	c.Assert(err, IsNil)
 
 	initialVersion, err := m.GetCurrentVersion()
@@ -160,7 +160,7 @@ func (s *MigrateSuite) TestLoadMigrations(c *C) {
 
 func (s *MigrateSuite) TestLoadMigrationsNoForward(c *C) {
 	var err error
-	m, err := migrate.NewMigrator(s.conn, versionTable, true)
+	m, err := migrate.NewMigrator(s.conn, versionTable)
 	c.Assert(err, IsNil)
 
 	m.Data = map[string]interface{}{"prefix": "foo"}
@@ -333,7 +333,7 @@ func Example_OnStartMigrationProgressLogging() {
 	}
 
 	var m *migrate.Migrator
-	m, err = migrate.NewMigrator(conn, "schema_version", false)
+	m, err = migrate.NewMigrator(conn, "schema_version")
 	if err != nil {
 		fmt.Printf("Unable to create migrator: %v", err)
 		return

@@ -58,8 +58,6 @@ type MigratorOptions struct {
 	DisableTx bool
 	// MigratorFS is the interface used for collecting the migrations.
 	MigratorFS MigratorFS
-	// RequireForwardMigration causes every migration forward step to be checked for non comments.
-	RequireForwardMigration bool
 }
 
 type Migrator struct {
@@ -71,8 +69,8 @@ type Migrator struct {
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
-func NewMigrator(conn *pgx.Conn, versionTable string, requireFw bool) (m *Migrator, err error) {
-	return NewMigratorEx(conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}, RequireForwardMigration: requireFw})
+func NewMigrator(conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
+	return NewMigratorEx(conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}})
 }
 
 func NewMigratorEx(conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
@@ -190,21 +188,21 @@ func (m *Migrator) LoadMigrations(path string) error {
 		if err != nil {
 			return err
 		}
-		if m.options.RequireForwardMigration {
-			containsSQL := false
-			for _, v := range strings.Split(upSQL, "\n") {
-				// Only account for regular single line comment.
-				cleanString := strings.TrimSpace(v)
-				if len(cleanString) != 0 &&
-					!strings.HasPrefix(cleanString, "--") {
-					containsSQL = true
-					break
-				}
-			}
-			if !containsSQL {
-				return ErrNoFwMigration
+		// Make sure there is SQL in the forward migration step.
+		containsSQL := false
+		for _, v := range strings.Split(upSQL, "\n") {
+			// Only account for regular single line comment, empty line and space/comment combination
+			cleanString := strings.TrimSpace(v)
+			if len(cleanString) != 0 &&
+				!strings.HasPrefix(cleanString, "--") {
+				containsSQL = true
+				break
 			}
 		}
+		if !containsSQL {
+			return ErrNoFwMigration
+		}
+
 		if len(pieces) == 2 {
 			downSQL = strings.TrimSpace(pieces[1])
 			downSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" down"), downSQL)
