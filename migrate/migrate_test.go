@@ -2,10 +2,11 @@ package migrate_test
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/jackc/pgx"
 	"github.com/jackc/tern/migrate"
 	. "gopkg.in/check.v1"
-	"testing"
 )
 
 type MigrateSuite struct {
@@ -52,7 +53,7 @@ func (s *MigrateSuite) tableExists(c *C, tableName string) bool {
 
 func (s *MigrateSuite) createEmptyMigrator(c *C) *migrate.Migrator {
 	var err error
-	m, err := migrate.NewMigrator(s.conn, versionTable)
+	m, err := migrate.NewMigrator(s.conn, versionTable, false)
 	c.Assert(err, IsNil)
 	return m
 }
@@ -77,7 +78,7 @@ func (s *MigrateSuite) TestNewMigrator(c *C) {
 	var err error
 
 	// Initial run
-	m, err = migrate.NewMigrator(s.conn, versionTable)
+	m, err = migrate.NewMigrator(s.conn, versionTable, false)
 	c.Assert(err, IsNil)
 
 	// Creates version table
@@ -85,7 +86,7 @@ func (s *MigrateSuite) TestNewMigrator(c *C) {
 	c.Assert(schemaVersionExists, Equals, true)
 
 	// Succeeds when version table is already created
-	m, err = migrate.NewMigrator(s.conn, versionTable)
+	m, err = migrate.NewMigrator(s.conn, versionTable, false)
 	c.Assert(err, IsNil)
 
 	initialVersion, err := m.GetCurrentVersion()
@@ -155,6 +156,16 @@ func (s *MigrateSuite) TestLoadMigrations(c *C) {
 	c.Check(m.Migrations[3].Name, Equals, "004_data_interpolation.sql")
 	c.Check(m.Migrations[3].UpSQL, Equals, "create table foo_bar(id serial primary key);")
 	c.Check(m.Migrations[3].DownSQL, Equals, "drop table foo_bar;")
+}
+
+func (s *MigrateSuite) TestLoadMigrationsNoForward(c *C) {
+	var err error
+	m, err := migrate.NewMigrator(s.conn, versionTable, true)
+	c.Assert(err, IsNil)
+
+	m.Data = map[string]interface{}{"prefix": "foo"}
+	err = m.LoadMigrations("testdata/noforward")
+	c.Assert(err, IsNil)
 }
 
 func (s *MigrateSuite) TestMigrate(c *C) {
@@ -322,7 +333,7 @@ func Example_OnStartMigrationProgressLogging() {
 	}
 
 	var m *migrate.Migrator
-	m, err = migrate.NewMigrator(conn, "schema_version")
+	m, err = migrate.NewMigrator(conn, "schema_version", false)
 	if err != nil {
 		fmt.Printf("Unable to create migrator: %v", err)
 		return

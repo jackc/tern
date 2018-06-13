@@ -89,6 +89,7 @@ type Config struct {
 
 var cliOptions struct {
 	destinationVersion string
+	noEmptyForward     bool
 	migrationsPath     string
 	configPath         string
 
@@ -203,6 +204,7 @@ The word "last":
 		Run: Migrate,
 	}
 	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
+	cmdMigrate.Flags().BoolVarP(&cliOptions.noEmptyForward, "requirefoward", "r", false, "fail if forward step is devoid of SQL statements")
 	addConfigFlagsToCommand(cmdMigrate)
 
 	cmdStatus := &cobra.Command{
@@ -358,7 +360,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 	}
 	defer conn.Close()
 
-	migrator, err := migrate.NewMigrator(conn, config.VersionTable)
+	migrator, err := migrate.NewMigrator(conn, config.VersionTable, cliOptions.noEmptyForward)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)

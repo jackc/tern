@@ -3,14 +3,16 @@ package migrate
 import (
 	"bytes"
 	"fmt"
-	"github.com/jackc/pgx"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
-	"os"
+
+	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
 )
 
 var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
@@ -54,6 +56,8 @@ type MigratorOptions struct {
 	DisableTx bool
 	// MigratorFS is the interface used for collecting the migrations.
 	MigratorFS MigratorFS
+	// RequireForwardMigration causes every migration forward step to be checked for non comments.
+	RequireForwardMigration bool
 }
 
 type Migrator struct {
@@ -65,8 +69,8 @@ type Migrator struct {
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
-func NewMigrator(conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	return NewMigratorEx(conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}})
+func NewMigrator(conn *pgx.Conn, versionTable string, requireFw bool) (m *Migrator, err error) {
+	return NewMigratorEx(conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}, RequireForwardMigration: requireFw})
 }
 
 func NewMigratorEx(conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
@@ -83,7 +87,7 @@ type MigratorFS interface {
 	Glob(pattern string) (matches []string, err error)
 }
 
-type defaultMigratorFS struct {}
+type defaultMigratorFS struct{}
 
 func (defaultMigratorFS) ReadDir(dirname string) ([]os.FileInfo, error) {
 	return ioutil.ReadDir(dirname)
@@ -183,6 +187,20 @@ func (m *Migrator) LoadMigrations(path string) error {
 		upSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" up"), upSQL)
 		if err != nil {
 			return err
+		}
+		if m.options.RequireForwardMigration {
+			containsSQL := false
+			for _, v := range strings.Split(upSQL, "\n") {
+				// Only account for regular single line comment.
+				if len(strings.TrimSpace(v)) != 0 &&
+					!strings.HasPrefix(v, "--") {
+					containsSQL = true
+					break
+				}
+			}
+			if !containsSQL {
+				return errors.Errorf("no sql in forward migration step")
+			}
 		}
 		if len(pieces) == 2 {
 			downSQL = strings.TrimSpace(pieces[1])
