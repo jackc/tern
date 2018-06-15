@@ -2,10 +2,11 @@ package migrate_test
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/jackc/pgx"
 	"github.com/jackc/tern/migrate"
 	. "gopkg.in/check.v1"
-	"testing"
 )
 
 type MigrateSuite struct {
@@ -155,6 +156,16 @@ func (s *MigrateSuite) TestLoadMigrations(c *C) {
 	c.Check(m.Migrations[3].Name, Equals, "004_data_interpolation.sql")
 	c.Check(m.Migrations[3].UpSQL, Equals, "create table foo_bar(id serial primary key);")
 	c.Check(m.Migrations[3].DownSQL, Equals, "drop table foo_bar;")
+}
+
+func (s *MigrateSuite) TestLoadMigrationsNoForward(c *C) {
+	var err error
+	m, err := migrate.NewMigrator(s.conn, versionTable)
+	c.Assert(err, IsNil)
+
+	m.Data = map[string]interface{}{"prefix": "foo"}
+	err = m.LoadMigrations("testdata/noforward")
+	c.Assert(err, Equals, migrate.ErrNoFwMigration)
 }
 
 func (s *MigrateSuite) TestMigrate(c *C) {

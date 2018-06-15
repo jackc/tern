@@ -3,17 +3,21 @@ package migrate
 import (
 	"bytes"
 	"fmt"
-	"github.com/jackc/pgx"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
-	"os"
+
+	"github.com/jackc/pgx"
+	"github.com/pkg/errors"
 )
 
 var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
+
+var ErrNoFwMigration = errors.Errorf("no sql in forward migration step")
 
 type BadVersionError string
 
@@ -83,7 +87,7 @@ type MigratorFS interface {
 	Glob(pattern string) (matches []string, err error)
 }
 
-type defaultMigratorFS struct {}
+type defaultMigratorFS struct{}
 
 func (defaultMigratorFS) ReadDir(dirname string) ([]os.FileInfo, error) {
 	return ioutil.ReadDir(dirname)
@@ -184,6 +188,21 @@ func (m *Migrator) LoadMigrations(path string) error {
 		if err != nil {
 			return err
 		}
+		// Make sure there is SQL in the forward migration step.
+		containsSQL := false
+		for _, v := range strings.Split(upSQL, "\n") {
+			// Only account for regular single line comment, empty line and space/comment combination
+			cleanString := strings.TrimSpace(v)
+			if len(cleanString) != 0 &&
+				!strings.HasPrefix(cleanString, "--") {
+				containsSQL = true
+				break
+			}
+		}
+		if !containsSQL {
+			return ErrNoFwMigration
+		}
+
 		if len(pieces) == 2 {
 			downSQL = strings.TrimSpace(pieces[1])
 			downSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" down"), downSQL)
