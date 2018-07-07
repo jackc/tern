@@ -275,7 +275,7 @@ func Init(cmd *cobra.Command, args []string) {
 
 	// Write default conf file
 	confPath := filepath.Join(directory, "tern.conf")
-	confFile, err := os.OpenFile(confPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.ModePerm)
+	confFile, err := os.OpenFile(confPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -290,7 +290,7 @@ func Init(cmd *cobra.Command, args []string) {
 
 	// Write sample migration
 	smPath := filepath.Join(directory, "001_create_people.sql.example")
-	smFile, err := os.OpenFile(smPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.ModePerm)
+	smFile, err := os.OpenFile(smPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -323,7 +323,7 @@ func NewMigration(cmd *cobra.Command, args []string) {
 
 	// Write new migration
 	mPath := filepath.Join(migrationsPath, newMigrationName)
-	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.ModePerm)
+	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
