@@ -227,6 +227,11 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.8.1 (April 5, 2019)
+
+* Issue `reset all` after every migration
+* Use go modules instead of Godep / vendoring
+
 ## 1.8.0 (February 26, 2018)
 
 * Update to latest version of pgx (PostgreSQL driver)

@@ -16,10 +16,10 @@ import (
 	"github.com/jackc/pgx"
 	"github.com/jackc/tern/migrate"
 	"github.com/spf13/cobra"
-	"github.com/vaughan0/go-ini"
+	ini "github.com/vaughan0/go-ini"
 )
 
-const VERSION = "1.8.0"
+const VERSION = "1.8.1"
 
 var defaultConf = `[database]
 # host is required (network host or path to Unix domain socket)
