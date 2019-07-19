@@ -4,7 +4,7 @@ import (
   "github.com/jackc/pgx"
 )
 
-var defaultConnectionParameters *pgx.ConnCpmfog = &pgx.ConnConfig{
+var defaultConnectionParameters *pgx.ConnConfig = &pgx.ConnConfig{
   // Host: "127.0.0.1",
   User: "tern",
   Password: "secret", // Password is usually not needed when using socket
