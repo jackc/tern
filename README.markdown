@@ -227,6 +227,11 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.8.2 (July 19, 2019)
+
+* Show PostgreSQL error details
+* Rename internal error type
+
 ## 1.8.1 (April 5, 2019)
 
 * Issue `reset all` after every migration
