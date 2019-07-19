@@ -415,18 +415,24 @@ func Migrate(cmd *cobra.Command, args []string) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 
-		if err, ok := err.(migrate.MigrationSyntaxError); ok {
-			ele, err := ExtractErrorLine(err.Sql, int(err.Position))
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
+		if err, ok := err.(migrate.MigrationPgError); ok {
+			if err.Detail != "" {
+				fmt.Println("DETAIL:", err.Detail)
 			}
 
-			prefix := fmt.Sprintf("LINE %d: ", ele.LineNum)
-			fmt.Printf("%s%s\n", prefix, ele.Text)
+			if err.Position != 0 {
+				ele, err := ExtractErrorLine(err.Sql, int(err.Position))
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
 
-			padding := strings.Repeat(" ", len(prefix)+ele.ColumnNum-1)
-			fmt.Printf("%s^\n", padding)
+				prefix := fmt.Sprintf("LINE %d: ", ele.LineNum)
+				fmt.Printf("%s%s\n", prefix, ele.Text)
+
+				padding := strings.Repeat(" ", len(prefix)+ele.ColumnNum-1)
+				fmt.Printf("%s^\n", padding)
+			}
 		}
 		os.Exit(1)
 	}
