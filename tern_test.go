@@ -1,9 +1,10 @@
 package main_test
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/vaughan0/go-ini"
 	"os"
 	"os/exec"
@@ -47,6 +48,7 @@ func readConfig(path string) (*pgx.ConnConfig, error) {
 }
 
 func tableExists(t *testing.T, tableName string) bool {
+	ctx := context.Background()
 	connConfig, err := readConfig("testdata/tern.conf")
 	if err != nil {
 		t.Fatal(err)
@@ -54,18 +56,19 @@ func tableExists(t *testing.T, tableName string) bool {
 
 	connConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 
-	conn, err := pgx.Connect(*connConfig)
+	conn, err := pgx.ConnectConfig(ctx, connConfig)
 	if err != nil {
 		connConfig.TLSConfig = nil
-		conn, err = pgx.Connect(*connConfig)
+		conn, err = pgx.ConnectConfig(ctx, connConfig)
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer conn.Close(ctx)
 
 	var exists bool
 	err = conn.QueryRow(
+		ctx,
 		"select exists(select 1 from information_schema.tables where table_catalog=$1 and table_name=$2)",
 		connConfig.Database,
 		tableName,

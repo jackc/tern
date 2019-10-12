@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -13,7 +15,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/tern/migrate"
 	"github.com/spf13/cobra"
 	ini "github.com/vaughan0/go-ini"
@@ -126,14 +128,16 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func (c *Config) Connect() (*pgx.Conn, error) {
+func (c *Config) Connect(ctx context.Context) (*pgx.Conn, error) {
 	if c.SSHConnConfig.Host != "" {
 		client, err := NewSSHClient(&c.SSHConnConfig)
 		if err != nil {
 			return nil, err
 		}
 
-		c.ConnConfig.Dial = client.Dial
+		c.ConnConfig.DialFunc = func(ctx context.Context, network string, addr string) (net.Conn, error) {
+			return client.Dial(network, addr)
+		}
 	}
 
 	// If sslmode was set in config file or cli argument, set it in the
@@ -151,16 +155,15 @@ func (c *Config) Connect() (*pgx.Conn, error) {
 			return nil, err
 		}
 
-		if cc, err := pgx.ParseEnvLibpq(); err == nil {
+		if cc, err := pgx.ParseConfig(""); err == nil {
 			c.ConnConfig.TLSConfig = cc.TLSConfig
-			c.ConnConfig.UseFallbackTLS = cc.UseFallbackTLS
-			c.ConnConfig.FallbackTLSConfig = cc.FallbackTLSConfig
+			c.ConnConfig.Fallbacks = cc.Fallbacks
 		} else {
 			return nil, err
 		}
 	}
 
-	return pgx.Connect(c.ConnConfig)
+	return pgx.ConnectConfig(ctx, &c.ConnConfig)
 }
 
 func main() {
@@ -339,6 +342,7 @@ func NewMigration(cmd *cobra.Command, args []string) {
 }
 
 func Migrate(cmd *cobra.Command, args []string) {
+	ctx := context.Background()
 	config, err := LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config:\n  %v\n", err)
@@ -351,14 +355,14 @@ func Migrate(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	conn, err := config.Connect()
+	conn, err := config.Connect(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
 		os.Exit(1)
 	}
-	defer conn.Close()
+	defer conn.Close(ctx)
 
-	migrator, err := migrate.NewMigrator(conn, config.VersionTable)
+	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -381,7 +385,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 	}
 
 	var currentVersion int32
-	currentVersion, err = migrator.GetCurrentVersion()
+	currentVersion, err = migrator.GetCurrentVersion(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to get current version:\n  %v\n", err)
 		os.Exit(1)
@@ -398,18 +402,18 @@ func Migrate(cmd *cobra.Command, args []string) {
 		return int32(n)
 	}
 	if destination == "last" {
-		err = migrator.Migrate()
+		err = migrator.Migrate(ctx)
 	} else if len(destination) >= 3 && destination[0:2] == "-+" {
-		err = migrator.MigrateTo(currentVersion - mustParseDestination(destination[2:]))
+		err = migrator.MigrateTo(ctx, currentVersion-mustParseDestination(destination[2:]))
 		if err == nil {
-			err = migrator.MigrateTo(currentVersion)
+			err = migrator.MigrateTo(ctx, currentVersion)
 		}
 	} else if len(destination) >= 2 && destination[0] == '-' {
-		err = migrator.MigrateTo(currentVersion - mustParseDestination(destination[1:]))
+		err = migrator.MigrateTo(ctx, currentVersion-mustParseDestination(destination[1:]))
 	} else if len(destination) >= 2 && destination[0] == '+' {
-		err = migrator.MigrateTo(currentVersion + mustParseDestination(destination[1:]))
+		err = migrator.MigrateTo(ctx, currentVersion+mustParseDestination(destination[1:]))
 	} else {
-		err = migrator.MigrateTo(mustParseDestination(destination))
+		err = migrator.MigrateTo(ctx, mustParseDestination(destination))
 	}
 
 	if err != nil {
@@ -439,6 +443,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 }
 
 func Status(cmd *cobra.Command, args []string) {
+	ctx := context.Background()
 	config, err := LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config:\n  %v\n", err)
@@ -451,14 +456,14 @@ func Status(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	conn, err := config.Connect()
+	conn, err := config.Connect(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
 		os.Exit(1)
 	}
-	defer conn.Close()
+	defer conn.Close(ctx)
 
-	migrator, err := migrate.NewMigrator(conn, config.VersionTable)
+	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -476,7 +481,7 @@ func Status(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	migrationVersion, err := migrator.GetCurrentVersion()
+	migrationVersion, err := migrator.GetCurrentVersion(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error retrieving migration version:\n  %v\n", err)
 		os.Exit(1)
@@ -498,7 +503,7 @@ func Status(cmd *cobra.Command, args []string) {
 
 func LoadConfig() (*Config, error) {
 	config := &Config{VersionTable: "schema_version"}
-	if connConfig, err := pgx.ParseEnvLibpq(); err == nil {
+	if connConfig, err := pgx.ParseConfig(""); err == nil {
 		config.ConnConfig = connConfig
 	} else {
 		return nil, err
