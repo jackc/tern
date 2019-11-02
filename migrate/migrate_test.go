@@ -1,10 +1,12 @@
 package migrate_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/tern/migrate"
 	. "gopkg.in/check.v1"
 )
@@ -21,7 +23,7 @@ var versionTable string = "schema_version_non_default"
 
 func (s *MigrateSuite) SetUpTest(c *C) {
 	var err error
-	s.conn, err = pgx.Connect(*defaultConnectionParameters)
+	s.conn, err = pgx.ConnectConfig(context.Background(), defaultConnectionParameters)
 	c.Assert(err, IsNil)
 
 	s.cleanupSampleMigrator(c)
@@ -29,13 +31,13 @@ func (s *MigrateSuite) SetUpTest(c *C) {
 
 func (s *MigrateSuite) currentVersion(c *C) int32 {
 	var n int32
-	err := s.conn.QueryRow("select version from " + versionTable).Scan(&n)
+	err := s.conn.QueryRow(context.Background(), "select version from "+versionTable).Scan(&n)
 	c.Assert(err, IsNil)
 	return n
 }
 
-func (s *MigrateSuite) Exec(c *C, sql string, arguments ...interface{}) pgx.CommandTag {
-	commandTag, err := s.conn.Exec(sql, arguments...)
+func (s *MigrateSuite) Exec(c *C, sql string, arguments ...interface{}) pgconn.CommandTag {
+	commandTag, err := s.conn.Exec(context.Background(), sql, arguments...)
 	c.Assert(err, IsNil)
 	return commandTag
 }
@@ -43,6 +45,7 @@ func (s *MigrateSuite) Exec(c *C, sql string, arguments ...interface{}) pgx.Comm
 func (s *MigrateSuite) tableExists(c *C, tableName string) bool {
 	var exists bool
 	err := s.conn.QueryRow(
+		context.Background(),
 		"select exists(select 1 from information_schema.tables where table_catalog=$1 and table_name=$2)",
 		defaultConnectionParameters.Database,
 		tableName,
@@ -53,7 +56,7 @@ func (s *MigrateSuite) tableExists(c *C, tableName string) bool {
 
 func (s *MigrateSuite) createEmptyMigrator(c *C) *migrate.Migrator {
 	var err error
-	m, err := migrate.NewMigrator(s.conn, versionTable)
+	m, err := migrate.NewMigrator(context.Background(), s.conn, versionTable)
 	c.Assert(err, IsNil)
 	return m
 }
@@ -78,7 +81,7 @@ func (s *MigrateSuite) TestNewMigrator(c *C) {
 	var err error
 
 	// Initial run
-	m, err = migrate.NewMigrator(s.conn, versionTable)
+	m, err = migrate.NewMigrator(context.Background(), s.conn, versionTable)
 	c.Assert(err, IsNil)
 
 	// Creates version table
@@ -86,10 +89,10 @@ func (s *MigrateSuite) TestNewMigrator(c *C) {
 	c.Assert(schemaVersionExists, Equals, true)
 
 	// Succeeds when version table is already created
-	m, err = migrate.NewMigrator(s.conn, versionTable)
+	m, err = migrate.NewMigrator(context.Background(), s.conn, versionTable)
 	c.Assert(err, IsNil)
 
-	initialVersion, err := m.GetCurrentVersion()
+	initialVersion, err := m.GetCurrentVersion(context.Background())
 	c.Assert(err, IsNil)
 	c.Assert(initialVersion, Equals, int32(0))
 }
@@ -160,7 +163,7 @@ func (s *MigrateSuite) TestLoadMigrations(c *C) {
 
 func (s *MigrateSuite) TestLoadMigrationsNoForward(c *C) {
 	var err error
-	m, err := migrate.NewMigrator(s.conn, versionTable)
+	m, err := migrate.NewMigrator(context.Background(), s.conn, versionTable)
 	c.Assert(err, IsNil)
 
 	m.Data = map[string]interface{}{"prefix": "foo"}
@@ -171,7 +174,7 @@ func (s *MigrateSuite) TestLoadMigrationsNoForward(c *C) {
 func (s *MigrateSuite) TestMigrate(c *C) {
 	m := s.createSampleMigrator(c)
 
-	err := m.Migrate()
+	err := m.Migrate(context.Background())
 	c.Assert(err, IsNil)
 	currentVersion := s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(3))
@@ -194,7 +197,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	}
 
 	// Migrate from 0 up to 1
-	err := m.MigrateTo(1)
+	err := m.MigrateTo(context.Background(), 1)
 	c.Assert(err, IsNil)
 	currentVersion := s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(1))
@@ -205,7 +208,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	c.Assert(onStartCallDownCount, Equals, 0)
 
 	// Migrate from 1 up to 3
-	err = m.MigrateTo(3)
+	err = m.MigrateTo(context.Background(), 3)
 	c.Assert(err, IsNil)
 	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(3))
@@ -216,7 +219,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	c.Assert(onStartCallDownCount, Equals, 0)
 
 	// Migrate from 3 to 3 is no-op
-	err = m.MigrateTo(3)
+	err = m.MigrateTo(context.Background(), 3)
 	c.Assert(err, IsNil)
 	currentVersion = s.currentVersion(c)
 	c.Assert(s.tableExists(c, "t1"), Equals, true)
@@ -226,7 +229,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	c.Assert(onStartCallDownCount, Equals, 0)
 
 	// Migrate from 3 down to 1
-	err = m.MigrateTo(1)
+	err = m.MigrateTo(context.Background(), 1)
 	c.Assert(err, IsNil)
 	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(1))
@@ -237,7 +240,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	c.Assert(onStartCallDownCount, Equals, 2)
 
 	// Migrate from 1 down to 0
-	err = m.MigrateTo(0)
+	err = m.MigrateTo(context.Background(), 0)
 	c.Assert(err, IsNil)
 	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(0))
@@ -248,7 +251,7 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 	c.Assert(onStartCallDownCount, Equals, 3)
 
 	// Migrate back up to 3
-	err = m.MigrateTo(3)
+	err = m.MigrateTo(context.Background(), 3)
 	c.Assert(err, IsNil)
 	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(3))
@@ -263,21 +266,21 @@ func (s *MigrateSuite) TestMigrateToBoundaries(c *C) {
 	m := s.createSampleMigrator(c)
 
 	// Migrate to -1 is error
-	err := m.MigrateTo(-1)
+	err := m.MigrateTo(context.Background(), -1)
 	c.Assert(err, ErrorMatches, "destination version -1 is outside the valid versions of 0 to 3")
 
 	// Migrate past end is error
-	err = m.MigrateTo(int32(len(m.Migrations)) + 1)
+	err = m.MigrateTo(context.Background(), int32(len(m.Migrations))+1)
 	c.Assert(err, ErrorMatches, "destination version 4 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
 	s.Exec(c, "update "+versionTable+" set version=-1")
-	err = m.MigrateTo(int32(1))
+	err = m.MigrateTo(context.Background(), int32(1))
 	c.Assert(err, ErrorMatches, "current version -1 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
 	s.Exec(c, "update "+versionTable+" set version=4")
-	err = m.MigrateTo(int32(1))
+	err = m.MigrateTo(context.Background(), int32(1))
 	c.Assert(err, ErrorMatches, "current version 4 is outside the valid versions of 0 to 3")
 }
 
@@ -285,24 +288,24 @@ func (s *MigrateSuite) TestMigrateToIrreversible(c *C) {
 	m := s.createEmptyMigrator(c)
 	m.AppendMigration("Foo", "drop table if exists t3", "")
 
-	err := m.MigrateTo(1)
+	err := m.MigrateTo(context.Background(), 1)
 	c.Assert(err, IsNil)
 
-	err = m.MigrateTo(0)
+	err = m.MigrateTo(context.Background(), 0)
 	c.Assert(err, ErrorMatches, "Irreversible migration: 1 - Foo")
 }
 
 func (s *MigrateSuite) TestMigrateToDisableTx(c *C) {
-	m, err := migrate.NewMigratorEx(s.conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	m, err := migrate.NewMigratorEx(context.Background(), s.conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
 	c.Assert(err, IsNil)
 	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
 	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
 	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
 
-	tx, err := s.conn.Begin()
+	tx, err := s.conn.Begin(context.Background())
 	c.Assert(err, IsNil)
 
-	err = m.MigrateTo(3)
+	err = m.MigrateTo(context.Background(), 3)
 	c.Assert(err, IsNil)
 	currentVersion := s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(3))
@@ -310,7 +313,7 @@ func (s *MigrateSuite) TestMigrateToDisableTx(c *C) {
 	c.Assert(s.tableExists(c, "t2"), Equals, true)
 	c.Assert(s.tableExists(c, "t3"), Equals, true)
 
-	err = tx.Rollback()
+	err = tx.Rollback(context.Background())
 	c.Assert(err, IsNil)
 	currentVersion = s.currentVersion(c)
 	c.Assert(currentVersion, Equals, int32(0))
@@ -320,20 +323,20 @@ func (s *MigrateSuite) TestMigrateToDisableTx(c *C) {
 }
 
 func Example_OnStartMigrationProgressLogging() {
-	conn, err := pgx.Connect(*defaultConnectionParameters)
+	conn, err := pgx.ConnectConfig(context.Background(), defaultConnectionParameters)
 	if err != nil {
 		fmt.Printf("Unable to establish connection: %v", err)
 		return
 	}
 
 	// Clear any previous runs
-	if _, err = conn.Exec("drop table if exists schema_version"); err != nil {
+	if _, err = conn.Exec(context.Background(), "drop table if exists schema_version"); err != nil {
 		fmt.Printf("Unable to drop schema_version table: %v", err)
 		return
 	}
 
 	var m *migrate.Migrator
-	m, err = migrate.NewMigrator(conn, "schema_version")
+	m, err = migrate.NewMigrator(context.Background(), conn, "schema_version")
 	if err != nil {
 		fmt.Printf("Unable to create migrator: %v", err)
 		return
@@ -345,7 +348,7 @@ func Example_OnStartMigrationProgressLogging() {
 
 	m.AppendMigration("create a table", "create temporary table foo(id serial primary key)", "")
 
-	if err = m.Migrate(); err != nil {
+	if err = m.Migrate(context.Background()); err != nil {
 		fmt.Printf("Unexpected failure migrating: %v", err)
 		return
 	}

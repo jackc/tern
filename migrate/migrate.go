@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,7 +12,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
 )
 
@@ -43,7 +45,7 @@ func (e NoMigrationsFoundError) Error() string {
 
 type MigrationPgError struct {
 	Sql string
-	pgx.PgError
+	*pgconn.PgError
 }
 
 type Migration struct {
@@ -69,13 +71,13 @@ type Migrator struct {
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
-func NewMigrator(conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	return NewMigratorEx(conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}})
+func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
+	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}})
 }
 
-func NewMigratorEx(conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
+func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
 	m = &Migrator{conn: conn, versionTable: versionTable, options: opts}
-	err = m.ensureSchemaVersionTableExists()
+	err = m.ensureSchemaVersionTableExists(ctx)
 	m.Migrations = make([]*Migration, 0)
 	m.Data = make(map[string]interface{})
 	return
@@ -246,25 +248,25 @@ func (m *Migrator) AppendMigration(name, upSQL, downSQL string) {
 
 // Migrate runs pending migrations
 // It calls m.OnStart when it begins a migration
-func (m *Migrator) Migrate() error {
-	return m.MigrateTo(int32(len(m.Migrations)))
+func (m *Migrator) Migrate(ctx context.Context) error {
+	return m.MigrateTo(ctx, int32(len(m.Migrations)))
 }
 
 // MigrateTo migrates to targetVersion
-func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
+func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err error) {
 	// Lock to ensure multiple migrations cannot occur simultaneously
 	lockNum := int64(9628173550095224) // arbitrary random number
-	if _, lockErr := m.conn.Exec("select pg_advisory_lock($1)", lockNum); lockErr != nil {
+	if _, lockErr := m.conn.Exec(ctx, "select pg_advisory_lock($1)", lockNum); lockErr != nil {
 		return lockErr
 	}
 	defer func() {
-		_, unlockErr := m.conn.Exec("select pg_advisory_unlock($1)", lockNum)
+		_, unlockErr := m.conn.Exec(ctx, "select pg_advisory_unlock($1)", lockNum)
 		if err == nil && unlockErr != nil {
 			err = unlockErr
 		}
 	}()
 
-	currentVersion, err := m.GetCurrentVersion()
+	currentVersion, err := m.GetCurrentVersion(ctx)
 	if err != nil {
 		return err
 	}
@@ -305,13 +307,13 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 			}
 		}
 
-		var tx *pgx.Tx
+		var tx pgx.Tx
 		if !m.options.DisableTx {
-			tx, err = m.conn.Begin()
+			tx, err = m.conn.Begin(ctx)
 			if err != nil {
 				return err
 			}
-			defer tx.Rollback()
+			defer tx.Rollback(ctx)
 		}
 
 		// Fire on start callback
@@ -320,25 +322,25 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 		}
 
 		// Execute the migration
-		_, err = m.conn.Exec(sql)
+		_, err = m.conn.Exec(ctx, sql)
 		if err != nil {
-			if err, ok := err.(pgx.PgError); ok {
+			if err, ok := err.(*pgconn.PgError); ok {
 				return MigrationPgError{Sql: sql, PgError: err}
 			}
 			return err
 		}
 
 		// Reset all database connection settings. Important to do before updating version as search_path may have been changed.
-		m.conn.Exec("reset all")
+		m.conn.Exec(ctx, "reset all")
 
 		// Add one to the version
-		_, err = m.conn.Exec("update "+m.versionTable+" set version=$1", sequence)
+		_, err = m.conn.Exec(ctx, "update "+m.versionTable+" set version=$1", sequence)
 		if err != nil {
 			return err
 		}
 
 		if !m.options.DisableTx {
-			err = tx.Commit()
+			err = tx.Commit(ctx)
 			if err != nil {
 				return err
 			}
@@ -350,13 +352,13 @@ func (m *Migrator) MigrateTo(targetVersion int32) (err error) {
 	return nil
 }
 
-func (m *Migrator) GetCurrentVersion() (v int32, err error) {
-	err = m.conn.QueryRow("select version from " + m.versionTable).Scan(&v)
+func (m *Migrator) GetCurrentVersion(ctx context.Context) (v int32, err error) {
+	err = m.conn.QueryRow(ctx, "select version from "+m.versionTable).Scan(&v)
 	return v, err
 }
 
-func (m *Migrator) ensureSchemaVersionTableExists() (err error) {
-	_, err = m.conn.Exec(fmt.Sprintf(`
+func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err error) {
+	_, err = m.conn.Exec(ctx, fmt.Sprintf(`
     create table if not exists %s(version int4 not null);
 
     insert into %s(version)
