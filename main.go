@@ -504,7 +504,7 @@ func Status(cmd *cobra.Command, args []string) {
 func LoadConfig() (*Config, error) {
 	config := &Config{VersionTable: "schema_version"}
 	if connConfig, err := pgx.ParseConfig(""); err == nil {
-		config.ConnConfig = connConfig
+		config.ConnConfig = *connConfig
 	} else {
 		return nil, err
 	}
