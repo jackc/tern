@@ -3,6 +3,7 @@ package migrate_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/jackc/pgconn"
@@ -23,7 +24,7 @@ var versionTable string = "schema_version_non_default"
 
 func (s *MigrateSuite) SetUpTest(c *C) {
 	var err error
-	s.conn, err = pgx.ConnectConfig(context.Background(), defaultConnectionParameters)
+	s.conn, err = pgx.Connect(context.Background(), os.Getenv("MIGRATE_TEST_CONN_STRING"))
 	c.Assert(err, IsNil)
 
 	s.cleanupSampleMigrator(c)
@@ -46,8 +47,7 @@ func (s *MigrateSuite) tableExists(c *C, tableName string) bool {
 	var exists bool
 	err := s.conn.QueryRow(
 		context.Background(),
-		"select exists(select 1 from information_schema.tables where table_catalog=$1 and table_name=$2)",
-		defaultConnectionParameters.Database,
+		"select exists(select 1 from information_schema.tables where table_catalog=current_database() and table_name=$1)",
 		tableName,
 	).Scan(&exists)
 	c.Assert(err, IsNil)
@@ -323,7 +323,7 @@ func (s *MigrateSuite) TestMigrateToDisableTx(c *C) {
 }
 
 func Example_OnStartMigrationProgressLogging() {
-	conn, err := pgx.ConnectConfig(context.Background(), defaultConnectionParameters)
+	conn, err := pgx.Connect(context.Background(), os.Getenv("MIGRATE_TEST_CONN_STRING"))
 	if err != nil {
 		fmt.Printf("Unable to establish connection: %v", err)
 		return

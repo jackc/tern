@@ -4,14 +4,15 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/jackc/pgx/v4"
-	"github.com/vaughan0/go-ini"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v4"
+	"github.com/vaughan0/go-ini"
 )
 
 func TestMain(m *testing.M) {
@@ -30,8 +31,10 @@ func readConfig(path string) (*pgx.ConnConfig, error) {
 		return nil, err
 	}
 
-	cp := &pgx.ConnConfig{}
-	cp.Host, _ = file.Get("database", "host")
+	cp, _ := pgx.ParseConfig("")
+	if s, ok := file.Get("database", "host"); ok {
+		cp.Host = s
+	}
 	if p, ok := file.Get("database", "port"); ok {
 		n, err := strconv.ParseUint(p, 10, 16)
 		cp.Port = uint16(n)
@@ -40,9 +43,15 @@ func readConfig(path string) (*pgx.ConnConfig, error) {
 		}
 	}
 
-	cp.Database, _ = file.Get("database", "database")
-	cp.User, _ = file.Get("database", "user")
-	cp.Password, _ = file.Get("database", "password")
+	if s, ok := file.Get("database", "database"); ok {
+		cp.Database = s
+	}
+	if s, ok := file.Get("database", "user"); ok {
+		cp.User = s
+	}
+	if s, ok := file.Get("database", "Password"); ok {
+		cp.Password = s
+	}
 
 	return cp, nil
 }
