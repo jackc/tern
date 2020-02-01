@@ -225,6 +225,11 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.9.0 (February 1, 2020)
+
+* Default version table is explicitly in public schema
+* Update to pgx v4 (Alex Gaynor)
+
 ## 1.8.2 (July 19, 2019)
 
 * Show PostgreSQL error details
