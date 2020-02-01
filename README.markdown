@@ -225,6 +225,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.9.1 (February 1, 2020)
+
+* Look for version table in all schemas in search_path instead of just the top schema
+
 ## 1.9.0 (February 1, 2020)
 
 * Default version table is explicitly in public schema
