@@ -13,6 +13,7 @@ import (
 	"text/template"
 
 	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
 )
@@ -360,6 +361,14 @@ func (m *Migrator) GetCurrentVersion(ctx context.Context) (v int32, err error) {
 }
 
 func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err error) {
+	_, err = m.GetCurrentVersion(ctx)
+	if err == nil {
+		return nil
+	}
+	if pgErr, ok := err.(*pgconn.PgError); !ok || pgErr.Code != pgerrcode.UndefinedTable {
+		return err
+	}
+
 	_, err = m.conn.Exec(ctx, fmt.Sprintf(`
     create table if not exists %s(version int4 not null);
 

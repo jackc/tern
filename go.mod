@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jackc/pgconn v1.1.0
+	github.com/jackc/pgerrcode v0.0.0-20190803225404-afa3381909a6
 	github.com/jackc/pgx/v4 v4.1.2
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/cobra v0.0.0-20160114030619-9c9300901990

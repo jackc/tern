@@ -28,6 +28,12 @@ func (s *MigrateSuite) SetUpTest(c *C) {
 	c.Assert(err, IsNil)
 
 	s.cleanupSampleMigrator(c)
+
+	var currentUser string
+	err = s.conn.QueryRow(context.Background(), "select current_user").Scan(&currentUser)
+	c.Assert(err, IsNil)
+	_, err = s.conn.Exec(context.Background(), fmt.Sprintf("drop schema if exists %s cascade", currentUser))
+	c.Assert(err, IsNil)
 }
 
 func (s *MigrateSuite) currentVersion(c *C) int32 {
@@ -320,6 +326,27 @@ func (s *MigrateSuite) TestMigrateToDisableTx(c *C) {
 	c.Assert(s.tableExists(c, "t1"), Equals, false)
 	c.Assert(s.tableExists(c, "t2"), Equals, false)
 	c.Assert(s.tableExists(c, "t3"), Equals, false)
+}
+
+// https://github.com/jackc/tern/issues/18
+func (s *MigrateSuite) TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(c *C) {
+	m := s.createSampleMigrator(c)
+
+	err := m.Migrate(context.Background())
+	c.Assert(err, IsNil)
+	currentVersion := s.currentVersion(c)
+	c.Assert(currentVersion, Equals, int32(3))
+
+	var currentUser string
+	err = s.conn.QueryRow(context.Background(), "select current_user").Scan(&currentUser)
+	c.Assert(err, IsNil)
+	_, err = s.conn.Exec(context.Background(), fmt.Sprintf("create schema %s", currentUser))
+	c.Assert(err, IsNil)
+
+	m = s.createSampleMigrator(c)
+	mCurrentVersion, err := m.GetCurrentVersion(context.Background())
+	c.Assert(err, IsNil)
+	c.Assert(mCurrentVersion, Equals, int32(3))
 }
 
 func Example_OnStartMigrationProgressLogging() {
