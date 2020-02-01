@@ -60,7 +60,7 @@ host = 127.0.0.1
 database = tern_test
 user = jack
 password = {{.env.MIGRATOR_PASSWORD}}
-# version_table = schema_version
+# version_table = public.schema_version
 #
 # sslmode generally matches the behavior described in:
 # http://www.postgresql.org/docs/9.4/static/libpq-ssl.html#LIBPQ-SSL-PROTECTION

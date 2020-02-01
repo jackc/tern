@@ -32,7 +32,7 @@ var defaultConf = `[database]
 # user defaults to OS user
 # user =
 # password =
-# version_table = schema_version
+# version_table = public.schema_version
 #
 # sslmode generally matches the behavior described in:
 # http://www.postgresql.org/docs/9.4/static/libpq-ssl.html#LIBPQ-SSL-PROTECTION
@@ -251,7 +251,7 @@ func addConfigFlagsToCommand(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&cliOptions.database, "database", "", "", "database name")
 	cmd.Flags().StringVarP(&cliOptions.sslmode, "sslmode", "", "", "SSL mode")
 	cmd.Flags().StringVarP(&cliOptions.sslrootcert, "sslrootcert", "", "", "SSL root certificate")
-	cmd.Flags().StringVarP(&cliOptions.versionTable, "version-table", "", "schema_version", "version table name")
+	cmd.Flags().StringVarP(&cliOptions.versionTable, "version-table", "", "public.schema_version", "version table name")
 
 	cmd.Flags().StringVarP(&cliOptions.sshHost, "ssh-host", "", "", "SSH tunnel host")
 	cmd.Flags().StringVarP(&cliOptions.sshPort, "ssh-port", "", "ssh", "SSH tunnel port")
@@ -502,7 +502,7 @@ func Status(cmd *cobra.Command, args []string) {
 }
 
 func LoadConfig() (*Config, error) {
-	config := &Config{VersionTable: "schema_version"}
+	config := &Config{VersionTable: "public.schema_version"}
 	if connConfig, err := pgx.ParseConfig(""); err == nil {
 		config.ConnConfig = *connConfig
 	} else {

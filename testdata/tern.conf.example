@@ -6,7 +6,7 @@ host = /var/run/postgresql
 database = tern_test
 # user defaults to OS user
 # user =
-# version_table = schema_version
+# version_table = public.schema_version
 
 [data]
 # Any fields in the data section are available in migration templates
