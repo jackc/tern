@@ -71,10 +71,12 @@ type Migrator struct {
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
+// NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
 func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
 	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}})
 }
 
+// NewMigratorEx initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
 func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
 	m = &Migrator{conn: conn, versionTable: versionTable, options: opts}
 	err = m.ensureSchemaVersionTableExists(ctx)
