@@ -337,12 +337,14 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		}
 
 		// Execute the migration
-		_, err = m.conn.Exec(ctx, sql)
-		if err != nil {
-			if err, ok := err.(*pgconn.PgError); ok {
-				return MigrationPgError{Sql: sql, PgError: err}
+		for _, stmt := range strings.Split(sql, "-- #SEND") {
+			_, err = m.conn.Exec(ctx, stmt)
+			if err != nil {
+				if err, ok := err.(*pgconn.PgError); ok {
+					return MigrationPgError{Sql: sql, PgError: err}
+				}
+				return err
 			}
-			return err
 		}
 
 		// Reset all database connection settings. Important to do before updating version as search_path may have been changed.
