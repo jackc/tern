@@ -29,8 +29,7 @@ config file. See the sample directory for an example.
 # Configuration
 
 Database connection settings can be specified via the standard PostgreSQL
-environment variables (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, and
-PGSSLMODE, PGSSLROOTCERT), via program arguments, or in a config file. By
+environment variables, via program arguments, or in a config file. By
 default tern will look in the current directory for the config file tern.conf
 and the migrations.
 
@@ -44,7 +43,8 @@ permissions and the user to which permissions are granted should be
 configurable.
 
 If all database settings are supplied by PG* environment variables or program
-arguments the config file is not required.
+arguments the config file is not required. In particular, using the `PGSERVICE`
+can reduce or eliminate the need for a configuration file.
 
 The entire `tern.conf` file is processed through the Go standard
 `text/template` package. The program environment is available at `.env`.
