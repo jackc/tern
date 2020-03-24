@@ -225,6 +225,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.10.1 (March 24, 2020)
+
+* Fix default CLI version-table argument overriding config value
+
 ## 1.10.0 (March 7, 2020)
 
 * Better locking to protect against multiple concurrent migrators on first run
