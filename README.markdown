@@ -225,6 +225,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.10.2 (March 28, 2020)
+
+* CLI now handles SIGINT (ctrl+c) and attempts to cancel in-progress migration before quitting
+
 ## 1.10.1 (March 24, 2020)
 
 * Fix default CLI version-table argument overriding config value
