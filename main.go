@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"os/signal"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -390,6 +391,16 @@ func Migrate(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Unable to get current version:\n  %v\n", err)
 		os.Exit(1)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	interruptChan := make(chan os.Signal, 1)
+	signal.Notify(interruptChan, os.Interrupt)
+	go func() {
+		<-interruptChan
+		cancel()       // Cancel any in progress migrations
+		signal.Reset() // Only listen for one interrupt. If another interrupt signal is received allow it to terminate the program.
+	}()
 
 	destination := cliOptions.destinationVersion
 	mustParseDestination := func(d string) int32 {
