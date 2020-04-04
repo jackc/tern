@@ -9,185 +9,196 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/tern/migrate"
-	. "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-type MigrateSuite struct {
-	conn *pgx.Conn
-}
-
-func Test(t *testing.T) { TestingT(t) }
-
-var _ = Suite(&MigrateSuite{})
 
 var versionTable string = "schema_version_non_default"
 
-func (s *MigrateSuite) SetUpTest(c *C) {
-	var err error
-	s.conn, err = pgx.Connect(context.Background(), os.Getenv("MIGRATE_TEST_CONN_STRING"))
-	c.Assert(err, IsNil)
+func connectConn(t testing.TB) *pgx.Conn {
+	conn, err := pgx.Connect(context.Background(), os.Getenv("MIGRATE_TEST_CONN_STRING"))
+	assert.NoError(t, err)
 
-	s.cleanupSampleMigrator(c)
+	cleanupSampleMigrator(t, conn)
 
 	var currentUser string
-	err = s.conn.QueryRow(context.Background(), "select current_user").Scan(&currentUser)
-	c.Assert(err, IsNil)
-	_, err = s.conn.Exec(context.Background(), fmt.Sprintf("drop schema if exists %s cascade", currentUser))
-	c.Assert(err, IsNil)
+	err = conn.QueryRow(context.Background(), "select current_user").Scan(&currentUser)
+	assert.NoError(t, err)
+	_, err = conn.Exec(context.Background(), fmt.Sprintf("drop schema if exists %s cascade", currentUser))
+	assert.NoError(t, err)
+
+	return conn
 }
 
-func (s *MigrateSuite) currentVersion(c *C) int32 {
+func currentVersion(t testing.TB, conn *pgx.Conn) int32 {
 	var n int32
-	err := s.conn.QueryRow(context.Background(), "select version from "+versionTable).Scan(&n)
-	c.Assert(err, IsNil)
+	err := conn.QueryRow(context.Background(), "select version from "+versionTable).Scan(&n)
+	assert.NoError(t, err)
 	return n
 }
 
-func (s *MigrateSuite) Exec(c *C, sql string, arguments ...interface{}) pgconn.CommandTag {
-	commandTag, err := s.conn.Exec(context.Background(), sql, arguments...)
-	c.Assert(err, IsNil)
+func mustExec(t testing.TB, conn *pgx.Conn, sql string, arguments ...interface{}) pgconn.CommandTag {
+	commandTag, err := conn.Exec(context.Background(), sql, arguments...)
+	assert.NoError(t, err)
 	return commandTag
 }
 
-func (s *MigrateSuite) tableExists(c *C, tableName string) bool {
+func tableExists(t testing.TB, conn *pgx.Conn, tableName string) bool {
 	var exists bool
-	err := s.conn.QueryRow(
+	err := conn.QueryRow(
 		context.Background(),
 		"select exists(select 1 from information_schema.tables where table_catalog=current_database() and table_name=$1)",
 		tableName,
 	).Scan(&exists)
-	c.Assert(err, IsNil)
+	assert.NoError(t, err)
 	return exists
 }
 
-func (s *MigrateSuite) createEmptyMigrator(c *C) *migrate.Migrator {
+func createEmptyMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 	var err error
-	m, err := migrate.NewMigrator(context.Background(), s.conn, versionTable)
-	c.Assert(err, IsNil)
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	assert.NoError(t, err)
 	return m
 }
 
-func (s *MigrateSuite) createSampleMigrator(c *C) *migrate.Migrator {
-	m := s.createEmptyMigrator(c)
+func createSampleMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
+	m := createEmptyMigrator(t, conn)
 	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
 	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
 	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
 	return m
 }
 
-func (s *MigrateSuite) cleanupSampleMigrator(c *C) {
+func cleanupSampleMigrator(t testing.TB, conn *pgx.Conn) {
 	tables := []string{versionTable, "t1", "t2", "t3"}
 	for _, table := range tables {
-		s.Exec(c, "drop table if exists "+table)
+		mustExec(t, conn, "drop table if exists "+table)
 	}
 }
 
-func (s *MigrateSuite) TestNewMigrator(c *C) {
-	var m *migrate.Migrator
-	var err error
+func TestNewMigrator(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
 
 	// Initial run
-	m, err = migrate.NewMigrator(context.Background(), s.conn, versionTable)
-	c.Assert(err, IsNil)
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	assert.NoError(t, err)
 
 	// Creates version table
-	schemaVersionExists := s.tableExists(c, versionTable)
-	c.Assert(schemaVersionExists, Equals, true)
+	schemaVersionExists := tableExists(t, conn, versionTable)
+	require.True(t, schemaVersionExists)
 
 	// Succeeds when version table is already created
-	m, err = migrate.NewMigrator(context.Background(), s.conn, versionTable)
-	c.Assert(err, IsNil)
+	m, err = migrate.NewMigrator(context.Background(), conn, versionTable)
+	assert.NoError(t, err)
 
 	initialVersion, err := m.GetCurrentVersion(context.Background())
-	c.Assert(err, IsNil)
-	c.Assert(initialVersion, Equals, int32(0))
+	assert.NoError(t, err)
+	require.EqualValues(t, 0, initialVersion)
 }
 
-func (s *MigrateSuite) TestAppendMigration(c *C) {
-	m := s.createEmptyMigrator(c)
+func TestAppendMigration(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createEmptyMigrator(t, conn)
 
 	name := "Create t"
 	upSQL := "create t..."
 	downSQL := "drop t..."
 	m.AppendMigration(name, upSQL, downSQL)
 
-	c.Assert(len(m.Migrations), Equals, 1)
-	c.Assert(m.Migrations[0].Name, Equals, name)
-	c.Assert(m.Migrations[0].UpSQL, Equals, upSQL)
-	c.Assert(m.Migrations[0].DownSQL, Equals, downSQL)
+	assert.Len(t, m.Migrations, 1)
+	assert.Equal(t, m.Migrations[0].Name, name)
+	assert.Equal(t, m.Migrations[0].UpSQL, upSQL)
+	assert.Equal(t, m.Migrations[0].DownSQL, downSQL)
 }
 
-func (s *MigrateSuite) TestLoadMigrationsMissingDirectory(c *C) {
-	m := s.createEmptyMigrator(c)
+func TestLoadMigrationsMissingDirectory(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createEmptyMigrator(t, conn)
+
 	err := m.LoadMigrations("testdata/missing")
-	c.Assert(err, ErrorMatches, "open testdata/missing: no such file or directory")
+	require.EqualError(t, err, "open testdata/missing: no such file or directory")
 }
 
-func (s *MigrateSuite) TestLoadMigrationsEmptyDirectory(c *C) {
-	m := s.createEmptyMigrator(c)
+func TestLoadMigrationsEmptyDirectory(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createEmptyMigrator(t, conn)
+
 	err := m.LoadMigrations("testdata/empty")
-	c.Assert(err, ErrorMatches, "No migrations found at testdata/empty")
+	require.EqualError(t, err, "No migrations found at testdata/empty")
 }
 
-func (s *MigrateSuite) TestFindMigrationsWithGaps(c *C) {
+func TestFindMigrationsWithGaps(t *testing.T) {
 	_, err := migrate.FindMigrations("testdata/gap")
-	c.Assert(err, ErrorMatches, "Missing migration 2")
+	require.EqualError(t, err, "Missing migration 2")
 }
 
-func (s *MigrateSuite) TestFindMigrationsWithDuplicate(c *C) {
+func TestFindMigrationsWithDuplicate(t *testing.T) {
 	_, err := migrate.FindMigrations("testdata/duplicate")
-	c.Assert(err, ErrorMatches, "Duplicate migration 2")
+	require.EqualError(t, err, "Duplicate migration 2")
 }
 
-func (s *MigrateSuite) TestLoadMigrations(c *C) {
-	m := s.createEmptyMigrator(c)
+func TestLoadMigrations(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createEmptyMigrator(t, conn)
+
 	m.Data = map[string]interface{}{"prefix": "foo"}
 	err := m.LoadMigrations("testdata/sample")
-	c.Assert(err, IsNil)
-	c.Assert(m.Migrations, HasLen, 5)
+	assert.NoError(t, err)
+	require.Len(t, m.Migrations, 5)
 
-	c.Check(m.Migrations[0].Name, Equals, "001_create_t1.sql")
-	c.Check(m.Migrations[0].UpSQL, Equals, `create table t1(
+	assert.Equal(t, "001_create_t1.sql", m.Migrations[0].Name)
+	assert.Equal(t, `create table t1(
   id serial primary key
-);`)
-	c.Check(m.Migrations[0].DownSQL, Equals, "drop table t1;")
+);`, m.Migrations[0].UpSQL)
+	assert.Equal(t, "drop table t1;", m.Migrations[0].DownSQL)
 
-	c.Check(m.Migrations[1].Name, Equals, "002_create_t2.sql")
-	c.Check(m.Migrations[1].UpSQL, Equals, `create table t2(
+	assert.Equal(t, "002_create_t2.sql", m.Migrations[1].Name)
+	assert.Equal(t, `create table t2(
   id serial primary key
-);`)
-	c.Check(m.Migrations[1].DownSQL, Equals, "drop table t2;")
+);`, m.Migrations[1].UpSQL)
+	assert.Equal(t, "drop table t2;", m.Migrations[1].DownSQL)
 
-	c.Check(m.Migrations[2].Name, Equals, "003_irreversible.sql")
-	c.Check(m.Migrations[2].UpSQL, Equals, "drop table t2;")
-	c.Check(m.Migrations[2].DownSQL, Equals, "")
+	assert.Equal(t, "003_irreversible.sql", m.Migrations[2].Name)
+	assert.Equal(t, "drop table t2;", m.Migrations[2].UpSQL)
+	assert.Equal(t, "", m.Migrations[2].DownSQL)
 
-	c.Check(m.Migrations[3].Name, Equals, "004_data_interpolation.sql")
-	c.Check(m.Migrations[3].UpSQL, Equals, "create table foo_bar(id serial primary key);")
-	c.Check(m.Migrations[3].DownSQL, Equals, "drop table foo_bar;")
+	assert.Equal(t, "004_data_interpolation.sql", m.Migrations[3].Name)
+	assert.Equal(t, "create table foo_bar(id serial primary key);", m.Migrations[3].UpSQL)
+	assert.Equal(t, "drop table foo_bar;", m.Migrations[3].DownSQL)
 }
 
-func (s *MigrateSuite) TestLoadMigrationsNoForward(c *C) {
-	var err error
-	m, err := migrate.NewMigrator(context.Background(), s.conn, versionTable)
-	c.Assert(err, IsNil)
+func TestLoadMigrationsNoForward(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	assert.NoError(t, err)
 
 	m.Data = map[string]interface{}{"prefix": "foo"}
 	err = m.LoadMigrations("testdata/noforward")
-	c.Assert(err, Equals, migrate.ErrNoFwMigration)
+	require.Equal(t, migrate.ErrNoFwMigration, err)
 }
 
-func (s *MigrateSuite) TestMigrate(c *C) {
-	m := s.createSampleMigrator(c)
+func TestMigrate(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createSampleMigrator(t, conn)
 
 	err := m.Migrate(context.Background())
-	c.Assert(err, IsNil)
-	currentVersion := s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(3))
+	assert.NoError(t, err)
+	currentVersion := currentVersion(t, conn)
+	assert.EqualValues(t, 3, currentVersion)
 }
 
-func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
-	m := s.createSampleMigrator(c)
+func TestMigrateToLifeCycle(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createSampleMigrator(t, conn)
 
 	var onStartCallUpCount int
 	var onStartCallDownCount int
@@ -198,155 +209,157 @@ func (s *MigrateSuite) TestMigrateToLifeCycle(c *C) {
 		case "down":
 			onStartCallDownCount++
 		default:
-			c.Fatalf("Unexpected direction: %s", direction)
+			t.Fatalf("Unexpected direction: %s", direction)
 		}
 	}
 
 	// Migrate from 0 up to 1
 	err := m.MigrateTo(context.Background(), 1)
-	c.Assert(err, IsNil)
-	currentVersion := s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(1))
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-	c.Assert(s.tableExists(c, "t2"), Equals, false)
-	c.Assert(s.tableExists(c, "t3"), Equals, false)
-	c.Assert(onStartCallUpCount, Equals, 1)
-	c.Assert(onStartCallDownCount, Equals, 0)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, currentVersion(t, conn))
+	assert.True(t, tableExists(t, conn, "t1"))
+	assert.False(t, tableExists(t, conn, "t2"))
+	assert.False(t, tableExists(t, conn, "t3"))
+	assert.EqualValues(t, 1, onStartCallUpCount)
+	assert.EqualValues(t, 0, onStartCallDownCount)
 
 	// Migrate from 1 up to 3
 	err = m.MigrateTo(context.Background(), 3)
-	c.Assert(err, IsNil)
-	currentVersion = s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(3))
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-	c.Assert(s.tableExists(c, "t2"), Equals, true)
-	c.Assert(s.tableExists(c, "t3"), Equals, true)
-	c.Assert(onStartCallUpCount, Equals, 3)
-	c.Assert(onStartCallDownCount, Equals, 0)
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, currentVersion(t, conn))
+	assert.True(t, tableExists(t, conn, "t1"))
+	assert.True(t, tableExists(t, conn, "t2"))
+	assert.True(t, tableExists(t, conn, "t3"))
+	assert.EqualValues(t, 3, onStartCallUpCount)
+	assert.EqualValues(t, 0, onStartCallDownCount)
 
 	// Migrate from 3 to 3 is no-op
 	err = m.MigrateTo(context.Background(), 3)
-	c.Assert(err, IsNil)
-	currentVersion = s.currentVersion(c)
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-	c.Assert(s.tableExists(c, "t2"), Equals, true)
-	c.Assert(s.tableExists(c, "t3"), Equals, true)
-	c.Assert(onStartCallUpCount, Equals, 3)
-	c.Assert(onStartCallDownCount, Equals, 0)
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, currentVersion(t, conn))
+	assert.True(t, tableExists(t, conn, "t1"))
+	assert.True(t, tableExists(t, conn, "t2"))
+	assert.True(t, tableExists(t, conn, "t3"))
+	assert.EqualValues(t, 3, onStartCallUpCount)
+	assert.EqualValues(t, 0, onStartCallDownCount)
 
 	// Migrate from 3 down to 1
 	err = m.MigrateTo(context.Background(), 1)
-	c.Assert(err, IsNil)
-	currentVersion = s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(1))
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-	c.Assert(s.tableExists(c, "t2"), Equals, false)
-	c.Assert(s.tableExists(c, "t3"), Equals, false)
-	c.Assert(onStartCallUpCount, Equals, 3)
-	c.Assert(onStartCallDownCount, Equals, 2)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, currentVersion(t, conn))
+	assert.True(t, tableExists(t, conn, "t1"))
+	assert.False(t, tableExists(t, conn, "t2"))
+	assert.False(t, tableExists(t, conn, "t3"))
+	assert.EqualValues(t, 3, onStartCallUpCount)
+	assert.EqualValues(t, 2, onStartCallDownCount)
 
 	// Migrate from 1 down to 0
 	err = m.MigrateTo(context.Background(), 0)
-	c.Assert(err, IsNil)
-	currentVersion = s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(0))
-	c.Assert(s.tableExists(c, "t1"), Equals, false)
-	c.Assert(s.tableExists(c, "t2"), Equals, false)
-	c.Assert(s.tableExists(c, "t3"), Equals, false)
-	c.Assert(onStartCallUpCount, Equals, 3)
-	c.Assert(onStartCallDownCount, Equals, 3)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, currentVersion(t, conn))
+	assert.False(t, tableExists(t, conn, "t1"))
+	assert.False(t, tableExists(t, conn, "t2"))
+	assert.False(t, tableExists(t, conn, "t3"))
+	assert.EqualValues(t, 3, onStartCallUpCount)
+	assert.EqualValues(t, 3, onStartCallDownCount)
 
 	// Migrate back up to 3
 	err = m.MigrateTo(context.Background(), 3)
-	c.Assert(err, IsNil)
-	currentVersion = s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(3))
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-	c.Assert(s.tableExists(c, "t2"), Equals, true)
-	c.Assert(s.tableExists(c, "t3"), Equals, true)
-	c.Assert(onStartCallUpCount, Equals, 6)
-	c.Assert(onStartCallDownCount, Equals, 3)
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, currentVersion(t, conn))
+	assert.True(t, tableExists(t, conn, "t1"))
+	assert.True(t, tableExists(t, conn, "t2"))
+	assert.True(t, tableExists(t, conn, "t3"))
+	assert.EqualValues(t, 6, onStartCallUpCount)
+	assert.EqualValues(t, 3, onStartCallDownCount)
 }
 
-func (s *MigrateSuite) TestMigrateToBoundaries(c *C) {
-	m := s.createSampleMigrator(c)
+func TestMigrateToBoundaries(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createSampleMigrator(t, conn)
 
 	// Migrate to -1 is error
 	err := m.MigrateTo(context.Background(), -1)
-	c.Assert(err, ErrorMatches, "destination version -1 is outside the valid versions of 0 to 3")
+	require.EqualError(t, err, "destination version -1 is outside the valid versions of 0 to 3")
 
 	// Migrate past end is error
 	err = m.MigrateTo(context.Background(), int32(len(m.Migrations))+1)
-	c.Assert(err, ErrorMatches, "destination version 4 is outside the valid versions of 0 to 3")
+	require.EqualError(t, err, "destination version 4 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
-	s.Exec(c, "update "+versionTable+" set version=-1")
+	mustExec(t, conn, "update "+versionTable+" set version=-1")
 	err = m.MigrateTo(context.Background(), int32(1))
-	c.Assert(err, ErrorMatches, "current version -1 is outside the valid versions of 0 to 3")
+	require.EqualError(t, err, "current version -1 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
-	s.Exec(c, "update "+versionTable+" set version=4")
+	mustExec(t, conn, "update "+versionTable+" set version=4")
 	err = m.MigrateTo(context.Background(), int32(1))
-	c.Assert(err, ErrorMatches, "current version 4 is outside the valid versions of 0 to 3")
+	require.EqualError(t, err, "current version 4 is outside the valid versions of 0 to 3")
 }
 
-func (s *MigrateSuite) TestMigrateToIrreversible(c *C) {
-	m := s.createEmptyMigrator(c)
+func TestMigrateToIrreversible(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createEmptyMigrator(t, conn)
 	m.AppendMigration("Foo", "drop table if exists t3", "")
 
 	err := m.MigrateTo(context.Background(), 1)
-	c.Assert(err, IsNil)
+	assert.NoError(t, err)
 
 	err = m.MigrateTo(context.Background(), 0)
-	c.Assert(err, ErrorMatches, "Irreversible migration: 1 - Foo")
+	require.EqualError(t, err, "Irreversible migration: 1 - Foo")
 }
 
-func (s *MigrateSuite) TestMigrateToDisableTx(c *C) {
-	m, err := migrate.NewMigratorEx(context.Background(), s.conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
-	c.Assert(err, IsNil)
+func TestMigrateToDisableTx(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	assert.NoError(t, err)
 	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
 	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
 	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
 
-	tx, err := s.conn.Begin(context.Background())
-	c.Assert(err, IsNil)
+	tx, err := conn.Begin(context.Background())
+	assert.NoError(t, err)
 
 	err = m.MigrateTo(context.Background(), 3)
-	c.Assert(err, IsNil)
-	currentVersion := s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(3))
-	c.Assert(s.tableExists(c, "t1"), Equals, true)
-	c.Assert(s.tableExists(c, "t2"), Equals, true)
-	c.Assert(s.tableExists(c, "t3"), Equals, true)
+	assert.NoError(t, err)
+	require.EqualValues(t, 3, currentVersion(t, conn))
+	require.True(t, tableExists(t, conn, "t1"))
+	require.True(t, tableExists(t, conn, "t2"))
+	require.True(t, tableExists(t, conn, "t3"))
 
 	err = tx.Rollback(context.Background())
-	c.Assert(err, IsNil)
-	currentVersion = s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(0))
-	c.Assert(s.tableExists(c, "t1"), Equals, false)
-	c.Assert(s.tableExists(c, "t2"), Equals, false)
-	c.Assert(s.tableExists(c, "t3"), Equals, false)
+	assert.NoError(t, err)
+	require.EqualValues(t, 0, currentVersion(t, conn))
+	require.False(t, tableExists(t, conn, "t1"))
+	require.False(t, tableExists(t, conn, "t2"))
+	require.False(t, tableExists(t, conn, "t3"))
 }
 
-// https://github.com/jackc/tern/issues/18
-func (s *MigrateSuite) TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(c *C) {
-	m := s.createSampleMigrator(c)
+// // https://github.com/jackc/tern/issues/18
+func TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createSampleMigrator(t, conn)
 
 	err := m.Migrate(context.Background())
-	c.Assert(err, IsNil)
-	currentVersion := s.currentVersion(c)
-	c.Assert(currentVersion, Equals, int32(3))
+	assert.NoError(t, err)
+	currentVersion := currentVersion(t, conn)
+	require.EqualValues(t, 3, currentVersion)
 
 	var currentUser string
-	err = s.conn.QueryRow(context.Background(), "select current_user").Scan(&currentUser)
-	c.Assert(err, IsNil)
-	_, err = s.conn.Exec(context.Background(), fmt.Sprintf("create schema %s", currentUser))
-	c.Assert(err, IsNil)
+	err = conn.QueryRow(context.Background(), "select current_user").Scan(&currentUser)
+	assert.NoError(t, err)
+	_, err = conn.Exec(context.Background(), fmt.Sprintf("create schema %s", currentUser))
+	assert.NoError(t, err)
 
-	m = s.createSampleMigrator(c)
+	m = createSampleMigrator(t, conn)
 	mCurrentVersion, err := m.GetCurrentVersion(context.Background())
-	c.Assert(err, IsNil)
-	c.Assert(mCurrentVersion, Equals, int32(3))
+	assert.NoError(t, err)
+	require.EqualValues(t, 3, mCurrentVersion)
 }
 
 func Example_OnStartMigrationProgressLogging() {
