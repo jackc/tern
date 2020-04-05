@@ -59,7 +59,7 @@ host = 127.0.0.1
 # port = 5432
 database = tern_test
 user = jack
-password = {{.env.MIGRATOR_PASSWORD}}
+password = {{env "MIGRATOR_PASSWORD"}}
 # version_table = public.schema_version
 #
 # sslmode generally matches the behavior described in:

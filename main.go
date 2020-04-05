@@ -16,6 +16,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/Masterminds/sprig"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/tern/migrate"
 	"github.com/spf13/cobra"
@@ -552,6 +553,7 @@ func LoadConfig() (*Config, error) {
 }
 
 func appendConfigFromFile(config *Config, path string) error {
+	// Accessing the environment through this map is deprecated now that the env function from sprig is available.
 	env := make(map[string]string)
 	for _, s := range os.Environ() {
 		parts := strings.SplitN(s, "=", 2)
@@ -563,7 +565,7 @@ func appendConfigFromFile(config *Config, path string) error {
 		return err
 	}
 
-	confTemplate, err := template.New("conf").Parse(string(fileBytes))
+	confTemplate, err := template.New("conf").Funcs(sprig.TxtFuncMap()).Parse(string(fileBytes))
 	if err != nil {
 		return err
 	}
