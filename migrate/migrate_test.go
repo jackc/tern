@@ -148,8 +148,8 @@ func TestLoadMigrations(t *testing.T) {
 
 	m.Data = map[string]interface{}{"prefix": "foo"}
 	err := m.LoadMigrations("testdata/sample")
-	assert.NoError(t, err)
-	require.Len(t, m.Migrations, 5)
+	require.NoError(t, err)
+	require.Len(t, m.Migrations, 6)
 
 	assert.Equal(t, "001_create_t1.sql", m.Migrations[0].Name)
 	assert.Equal(t, `create table t1(
@@ -170,6 +170,10 @@ func TestLoadMigrations(t *testing.T) {
 	assert.Equal(t, "004_data_interpolation.sql", m.Migrations[3].Name)
 	assert.Equal(t, "create table foo_bar(id serial primary key);", m.Migrations[3].UpSQL)
 	assert.Equal(t, "drop table foo_bar;", m.Migrations[3].DownSQL)
+
+	assert.Equal(t, "006_sprig.sql", m.Migrations[5].Name)
+	assert.Equal(t, "create table baz_42(id serial primary key);", m.Migrations[5].UpSQL)
+	assert.Equal(t, "drop table baz_42;", m.Migrations[5].DownSQL)
 }
 
 func TestLoadMigrationsNoForward(t *testing.T) {

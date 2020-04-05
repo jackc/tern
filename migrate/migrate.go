@@ -13,6 +13,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/Masterminds/sprig"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v4"
@@ -152,7 +153,7 @@ func FindMigrations(path string) ([]string, error) {
 func (m *Migrator) LoadMigrations(path string) error {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
-	mainTmpl := template.New("main")
+	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
 	sharedPaths, err := m.options.MigratorFS.Glob(filepath.Join(path, "*", "*.sql"))
 	if err != nil {
 		return err
