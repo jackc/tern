@@ -47,7 +47,8 @@ arguments the config file is not required. In particular, using the `PGSERVICE`
 can reduce or eliminate the need for a configuration file.
 
 The entire `tern.conf` file is processed through the Go standard
-`text/template` package. The program environment is available at `.env`.
+`text/template` package. [Sprig](http://masterminds.github.io/sprig/) functions
+are available.
 
 Example `tern.conf`:
 
@@ -153,7 +154,8 @@ when the underlying table(s) change.
 Tern uses the standard Go
 [text/template](http://golang.org/pkg/text/template/) package so conditionals
 and other advanced templating features are available if needed. See the
-package docs for details.
+package docs for details. [Sprig](http://masterminds.github.io/sprig/)
+functions are also available.
 
 ## Migrating
 
