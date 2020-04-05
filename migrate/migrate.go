@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -15,12 +16,11 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v4"
-	"github.com/pkg/errors"
 )
 
 var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
 
-var ErrNoFwMigration = errors.Errorf("no sql in forward migration step")
+var ErrNoFwMigration = errors.New("no sql in forward migration step")
 
 type BadVersionError string
 
