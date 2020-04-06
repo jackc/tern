@@ -153,7 +153,19 @@ func FindMigrations(path string) ([]string, error) {
 func (m *Migrator) LoadMigrations(path string) error {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
-	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
+	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap()).Funcs(
+		template.FuncMap{
+			"install_snapshot": func(name string) (string, error) {
+				codePackage, err := LoadCodePackageEx(filepath.Join(path, "snapshots", name), m.options.MigratorFS)
+				if err != nil {
+					return "", err
+				}
+
+				return codePackage.Eval(m.Data)
+			},
+		},
+	)
+
 	sharedPaths, err := m.options.MigratorFS.Glob(filepath.Join(path, "*", "*.sql"))
 	if err != nil {
 		return err

@@ -218,6 +218,14 @@ The word "last":
 	}
 	addCoreConfigFlagsToCommand(cmdInstallCode)
 
+	cmdSnapshotCode := &cobra.Command{
+		Use:   "snapshot-code PATH",
+		Short: "Snapshot a code package into a migration",
+		Args:  cobra.ExactArgs(1),
+		Run:   SnapshotCode,
+	}
+	cmdSnapshotCode.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+
 	cmdStatus := &cobra.Command{
 		Use:   "status",
 		Short: "Print current migration status",
@@ -245,6 +253,7 @@ The word "last":
 	rootCmd.AddCommand(cmdInit)
 	rootCmd.AddCommand(cmdMigrate)
 	rootCmd.AddCommand(cmdInstallCode)
+	rootCmd.AddCommand(cmdSnapshotCode)
 	rootCmd.AddCommand(cmdStatus)
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdVersion)
@@ -499,6 +508,49 @@ func InstallCode(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Failed to install code package:\n  %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func SnapshotCode(cmd *cobra.Command, args []string) {
+	path := args[0]
+
+	_, err := migrate.LoadCodePackage(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	migrationsPath := cliOptions.migrationsPath
+	migrations, err := migrate.FindMigrations(migrationsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	migrationID := fmt.Sprintf("%03d", len(migrations)+1)
+	snapshotPath := filepath.Join(migrationsPath, "snapshots", migrationID)
+	err = copyCodePackageDir(path, snapshotPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error copying snapshot:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	newMigrationName := fmt.Sprintf("%s_install_%s.sql", migrationID, filepath.Base(path))
+
+	// Write new migration
+	mPath := filepath.Join(migrationsPath, newMigrationName)
+	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer mFile.Close()
+
+	_, err = fmt.Fprintf(mFile, `{{ install_snapshot "%s" }}`, migrationID)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 }
 
 func Status(cmd *cobra.Command, args []string) {
