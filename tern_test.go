@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vaughan0/go-ini"
 )
 
@@ -56,12 +58,10 @@ func readConfig(path string) (*pgx.ConnConfig, error) {
 	return cp, nil
 }
 
-func tableExists(t *testing.T, tableName string) bool {
+func connectConn(t *testing.T) *pgx.Conn {
 	ctx := context.Background()
 	connConfig, err := readConfig("testdata/tern.conf")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	connConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 
@@ -70,16 +70,20 @@ func tableExists(t *testing.T, tableName string) bool {
 		connConfig.TLSConfig = nil
 		conn, err = pgx.ConnectConfig(ctx, connConfig)
 	}
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
+	return conn
+}
+
+func tableExists(t *testing.T, tableName string) bool {
+	ctx := context.Background()
+	conn := connectConn(t)
 	defer conn.Close(ctx)
 
 	var exists bool
-	err = conn.QueryRow(
+	err := conn.QueryRow(
 		ctx,
-		"select exists(select 1 from information_schema.tables where table_catalog=$1 and table_name=$2)",
-		connConfig.Database,
+		"select exists(select 1 from information_schema.tables where table_catalog=current_database() and table_name=$1)",
 		tableName,
 	).Scan(&exists)
 	if err != nil {
@@ -237,6 +241,18 @@ version:  1 of 2`
 	if !strings.Contains(output, expected) {
 		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
 	}
+}
+
+func TestInstallCode(t *testing.T) {
+	tern(t, "install-code", "-c", "testdata/tern.conf", "testdata/code")
+
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	var n int
+	err := conn.QueryRow(context.Background(), "select add(1,2)").Scan(&n)
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
 }
 
 func TestCLIArgsWithoutConfigFile(t *testing.T) {

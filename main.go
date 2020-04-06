@@ -210,6 +210,14 @@ The word "last":
 	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
 	addConfigFlagsToCommand(cmdMigrate)
 
+	cmdInstallCode := &cobra.Command{
+		Use:   "install-code PATH",
+		Short: "Install a code package into the database",
+		Args:  cobra.ExactArgs(1),
+		Run:   InstallCode,
+	}
+	addCoreConfigFlagsToCommand(cmdInstallCode)
+
 	cmdStatus := &cobra.Command{
 		Use:   "status",
 		Short: "Print current migration status",
@@ -236,14 +244,14 @@ The word "last":
 	rootCmd := &cobra.Command{Use: "tern", Short: "tern - PostgreSQL database migrator"}
 	rootCmd.AddCommand(cmdInit)
 	rootCmd.AddCommand(cmdMigrate)
+	rootCmd.AddCommand(cmdInstallCode)
 	rootCmd.AddCommand(cmdStatus)
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
 }
 
-func addConfigFlagsToCommand(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+func addCoreConfigFlagsToCommand(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
 
 	cmd.Flags().StringVarP(&cliOptions.host, "host", "", "", "database host")
@@ -259,6 +267,11 @@ func addConfigFlagsToCommand(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&cliOptions.sshPort, "ssh-port", "", "ssh", "SSH tunnel port")
 	cmd.Flags().StringVarP(&cliOptions.sshUser, "ssh-user", "", "", "SSH tunnel user (default is OS user")
 	cmd.Flags().StringVarP(&cliOptions.sshPassword, "ssh-password", "", "", "SSH tunnel password (unneeded if using SSH agent authentication)")
+}
+
+func addConfigFlagsToCommand(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	addCoreConfigFlagsToCommand(cmd)
 }
 
 func Init(cmd *cobra.Command, args []string) {
@@ -343,8 +356,7 @@ func NewMigration(cmd *cobra.Command, args []string) {
 
 }
 
-func Migrate(cmd *cobra.Command, args []string) {
-	ctx := context.Background()
+func loadConfigAndConnectToDB(ctx context.Context) (*Config, *pgx.Conn) {
 	config, err := LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config:\n  %v\n", err)
@@ -362,6 +374,13 @@ func Migrate(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
 		os.Exit(1)
 	}
+
+	return config, conn
+}
+
+func Migrate(cmd *cobra.Command, args []string) {
+	ctx := context.Background()
+	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
 	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
@@ -454,25 +473,37 @@ func Migrate(cmd *cobra.Command, args []string) {
 	}
 }
 
+func InstallCode(cmd *cobra.Command, args []string) {
+	path := args[0]
+
+	codePackage, err := migrate.LoadCodePackage(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+	config, conn := loadConfigAndConnectToDB(ctx)
+	defer conn.Close(ctx)
+
+	sql, err := codePackage.Eval(config.Data)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(sql)
+
+	err = migrate.LockExecTx(ctx, conn, sql)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to install code package:\n  %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func Status(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
-	config, err := LoadConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config:\n  %v\n", err)
-		os.Exit(1)
-	}
-
-	err = config.Validate()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid config:\n  %v\n", err)
-		os.Exit(1)
-	}
-
-	conn, err := config.Connect(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to PostgreSQL:\n  %v\n", err)
-		os.Exit(1)
-	}
+	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
 	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
