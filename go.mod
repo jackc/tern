@@ -16,5 +16,5 @@ require (
 	github.com/spf13/cobra v0.0.7
 	github.com/stretchr/testify v1.5.1
 	github.com/vaughan0/go-ini v0.0.0-20130923145212-a98ad7ee00ec
-	golang.org/x/crypto v0.0.0-20200403201458-baeed622b8d8
+	golang.org/x/crypto v0.0.0-20200406173513-056763e48d71
 )
