@@ -1,6 +1,7 @@
 # Tern - The SQL Fan's Migrator
 
-Tern is a standalone migration tool for PostgreSQL.
+Tern is a standalone migration tool for PostgreSQL. It includes traditional migrations as well as a separate optional
+workflow for managing database code such as functions and views.
 
 ## Features
 
@@ -187,6 +188,77 @@ To use a different config file:
 To use a different migrations directory:
 
     tern migrate --migrations path/to/migrations
+
+## Code Packages
+
+The migration paradigm works well for creating and altering tables, but it can be unwieldy when dealing with database
+code such as server side functions and views. For example, consider a schema where view `a` depends on view `b` which
+depends on view `c`. A change to `c` may require the following steps:
+
+1. Drop `a`
+2. Drop `b`
+3. Drop `c`
+4. Create `c`
+5. Create `b`
+6. Create `a`
+
+In addition to the challenge of manually building such a migration it is difficult to use version control to see the
+changes in a particular database object over time when its definition is scattered through multiple migrations.
+
+A solution to this is code packages. A code package is a directory with an `install.sql` file that contains the
+instructions to completely drop and recreate a set of database code. The command `code install` can be used to directly
+install a code package (especially useful during development) and the `code snapshot` command can be used to make a
+single migration that installs that code package.
+
+For example given a directory `code` containing the following files:
+
+```
+-- install.sql
+drop schema if exists code cascade;
+create schema code;
+
+{{ template "add.sql" . }}
+```
+
+```
+-- add.sql
+create function code.add(int, int) returns int
+language plpgsql as $$
+begin
+  return $1 + $2;
+end;
+$$;
+```
+
+Then this command would install the package into the database.
+
+```
+tern code install path/to/code --config path/to/tern.conf
+```
+
+And this command would create a migration from the current state of the code package.
+
+```
+tern code snapshot path/to/code --migrations path/to/migrations
+```
+
+Code packages have access to data variables defined in your configuration file as well as functions provided by
+[Sprig](http://masterminds.github.io/sprig/).
+
+## Template Tips
+
+The `env` function can be used to read provess environment variables.
+
+```
+drop schema if exists {{ env "CODE_SCHEMA" }} cascade;
+create schema {{ env "CODE_SCHEMA" }};
+```
+
+The [Sprig dictionary functions](http://masterminds.github.io/sprig/dicts.html) can be useful to call templates with extra parameters merged into the `.` value.
+
+```
+{{ template "_view_partial.sql" (merge (dict "view_name" "some_name" "where_clause" "some_extra_condition=true") . ) }}
+```
 
 ## SSH Tunnel
 
