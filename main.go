@@ -210,21 +210,26 @@ The word "last":
 	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
 	addConfigFlagsToCommand(cmdMigrate)
 
-	cmdInstallCode := &cobra.Command{
-		Use:   "install-code PATH",
+	cmdCode := &cobra.Command{
+		Use:   "code COMMAND",
+		Short: "Execute a code package command",
+	}
+
+	cmdCodeInstall := &cobra.Command{
+		Use:   "install PATH",
 		Short: "Install a code package into the database",
 		Args:  cobra.ExactArgs(1),
 		Run:   InstallCode,
 	}
-	addCoreConfigFlagsToCommand(cmdInstallCode)
+	addCoreConfigFlagsToCommand(cmdCodeInstall)
 
-	cmdSnapshotCode := &cobra.Command{
-		Use:   "snapshot-code PATH",
+	cmdCodeSnapshot := &cobra.Command{
+		Use:   "snapshot PATH",
 		Short: "Snapshot a code package into a migration",
 		Args:  cobra.ExactArgs(1),
 		Run:   SnapshotCode,
 	}
-	cmdSnapshotCode.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdCodeSnapshot.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
 
 	cmdStatus := &cobra.Command{
 		Use:   "status",
@@ -249,11 +254,13 @@ The word "last":
 		},
 	}
 
+	cmdCode.AddCommand(cmdCodeInstall)
+	cmdCode.AddCommand(cmdCodeSnapshot)
+
 	rootCmd := &cobra.Command{Use: "tern", Short: "tern - PostgreSQL database migrator"}
 	rootCmd.AddCommand(cmdInit)
 	rootCmd.AddCommand(cmdMigrate)
-	rootCmd.AddCommand(cmdInstallCode)
-	rootCmd.AddCommand(cmdSnapshotCode)
+	rootCmd.AddCommand(cmdCode)
 	rootCmd.AddCommand(cmdStatus)
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdVersion)
