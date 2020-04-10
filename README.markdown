@@ -192,15 +192,15 @@ To use a different migrations directory:
 ## Code Packages
 
 The migration paradigm works well for creating and altering tables, but it can be unwieldy when dealing with database
-code such as server side functions and views. For example, consider a schema where view `a` depends on view `b` which
-depends on view `c`. A change to `c` may require the following steps:
+code such as server side functions and views. For example, consider a schema where view `c` depends on view `b` which
+depends on view `a`. A change to `a` may require the following steps:
 
-1. Drop `a`
+1. Drop `c`
 2. Drop `b`
-3. Drop `c`
-4. Create `c`
+3. Drop `a`
+4. Create `a`
 5. Create `b`
-6. Create `a`
+6. Create `c`
 
 In addition to the challenge of manually building such a migration it is difficult to use version control to see the
 changes in a particular database object over time when its definition is scattered through multiple migrations.
@@ -217,17 +217,24 @@ For example given a directory `code` containing the following files:
 drop schema if exists code cascade;
 create schema code;
 
-{{ template "add.sql" . }}
+{{ template "a.sql" . }}
+{{ template "b.sql" . }}
+{{ template "c.sql" . }}
 ```
 
 ```
--- add.sql
-create function code.add(int, int) returns int
-language plpgsql as $$
-begin
-  return $1 + $2;
-end;
-$$;
+-- a.sql
+create view code.a as select ...;
+```
+
+```
+-- b.sql
+create view code.b as select * from code.a where ...;
+```
+
+```
+-- c.sql
+create view code.c as select * from code.b where ...;
 ```
 
 Then this command would install the package into the database.
@@ -244,6 +251,9 @@ tern code snapshot path/to/code --migrations path/to/migrations
 
 Code packages have access to data variables defined in your configuration file as well as functions provided by
 [Sprig](http://masterminds.github.io/sprig/).
+
+It is recommended but not required for each code package to be installed into its own PostgreSQL schema. This schema
+could be determined by environment variable as part of a blue / green deployment process.
 
 ## Template Tips
 
