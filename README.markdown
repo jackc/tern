@@ -299,6 +299,11 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.11.0 (April 10, 2020)
+
+* Add [Sprig](http://masterminds.github.io/sprig/) functions to configuration file and migrations.
+* Add SQL code management distinct from migrations.
+
 ## 1.10.2 (March 28, 2020)
 
 * CLI now handles SIGINT (ctrl+c) and attempts to cancel in-progress migration before quitting
