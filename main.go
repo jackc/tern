@@ -223,6 +223,14 @@ The word "last":
 	}
 	addCoreConfigFlagsToCommand(cmdCodeInstall)
 
+	cmdCodeCompile := &cobra.Command{
+		Use:   "compile PATH",
+		Short: "Compile a code package into SQL",
+		Args:  cobra.ExactArgs(1),
+		Run:   CompileCode,
+	}
+	cmdCodeCompile.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
+
 	cmdCodeSnapshot := &cobra.Command{
 		Use:   "snapshot PATH",
 		Short: "Snapshot a code package into a migration",
@@ -255,6 +263,7 @@ The word "last":
 	}
 
 	cmdCode.AddCommand(cmdCodeInstall)
+	cmdCode.AddCommand(cmdCodeCompile)
 	cmdCode.AddCommand(cmdCodeSnapshot)
 
 	rootCmd := &cobra.Command{Use: "tern", Short: "tern - PostgreSQL database migrator"}
@@ -536,6 +545,36 @@ func InstallCode(cmd *cobra.Command, args []string) {
 		}
 		os.Exit(1)
 	}
+}
+
+func CompileCode(cmd *cobra.Command, args []string) {
+	path := args[0]
+
+	codePackage, err := migrate.LoadCodePackage(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	config, err := LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	err = config.Validate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid config:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	sql, err := codePackage.Eval(config.Data)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(sql)
 }
 
 func SnapshotCode(cmd *cobra.Command, args []string) {
