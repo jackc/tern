@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -124,6 +125,9 @@ func LockExecTx(ctx context.Context, conn *pgx.Conn, sql string) (err error) {
 
 	_, err = tx.Exec(ctx, sql)
 	if err != nil {
+		if err, ok := err.(*pgconn.PgError); ok {
+			return MigrationPgError{Sql: sql, PgError: err}
+		}
 		return err
 	}
 

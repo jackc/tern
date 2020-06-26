@@ -468,7 +468,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 
 		if err, ok := err.(migrate.MigrationPgError); ok {
 			if err.Detail != "" {
-				fmt.Println("DETAIL:", err.Detail)
+				fmt.Fprintln(os.Stderr, "DETAIL:", err.Detail)
 			}
 
 			if err.Position != 0 {
@@ -479,10 +479,10 @@ func Migrate(cmd *cobra.Command, args []string) {
 				}
 
 				prefix := fmt.Sprintf("LINE %d: ", ele.LineNum)
-				fmt.Printf("%s%s\n", prefix, ele.Text)
+				fmt.Fprintf(os.Stderr, "%s%s\n", prefix, ele.Text)
 
 				padding := strings.Repeat(" ", len(prefix)+ele.ColumnNum-1)
-				fmt.Printf("%s^\n", padding)
+				fmt.Fprintf(os.Stderr, "%s^\n", padding)
 			}
 		}
 		os.Exit(1)
@@ -512,7 +512,28 @@ func InstallCode(cmd *cobra.Command, args []string) {
 
 	err = migrate.LockExecTx(ctx, conn, sql)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to install code package:\n  %v\n", err)
+		if err, ok := err.(migrate.MigrationPgError); ok {
+			fmt.Fprintln(os.Stderr, err)
+			if err.Detail != "" {
+				fmt.Fprintln(os.Stderr, "DETAIL:", err.Detail)
+			}
+
+			if err.Position != 0 {
+				ele, err := ExtractErrorLine(err.Sql, int(err.Position))
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
+
+				prefix := fmt.Sprintf("LINE %d: ", ele.LineNum)
+				fmt.Fprintf(os.Stderr, "%s%s\n", prefix, ele.Text)
+
+				padding := strings.Repeat(" ", len(prefix)+ele.ColumnNum-1)
+				fmt.Fprintf(os.Stderr, "%s^\n", padding)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Failed to install code package:\n  %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
