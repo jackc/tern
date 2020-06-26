@@ -517,8 +517,6 @@ func InstallCode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Println(sql)
-
 	err = migrate.LockExecTx(ctx, conn, sql)
 	if err != nil {
 		if err, ok := err.(migrate.MigrationPgError); ok {
