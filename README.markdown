@@ -309,6 +309,12 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.12.0 (June 26, 2020)
+
+* Command code install no longer outputs compiled SQL.
+* Add code compile command to print compiled SQL code package.
+* Better error reporting for code install.
+
 ## 1.11.0 (April 10, 2020)
 
 * Add [Sprig](http://masterminds.github.io/sprig/) functions to configuration file and migrations.
