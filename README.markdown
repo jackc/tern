@@ -309,6 +309,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.12.1 (June 27, 2020)
+
+* Update to latest version of pgx.
+
 ## 1.12.0 (June 26, 2020)
 
 * Command code install no longer outputs compiled SQL.
