@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/jackc/pgconn"
@@ -16,10 +17,10 @@ import (
 var versionTable string = "schema_version_non_default"
 
 func connectConn(t testing.TB) *pgx.Conn {
+	prepareDatabase(t)
+
 	conn, err := pgx.Connect(context.Background(), os.Getenv("MIGRATE_TEST_CONN_STRING"))
 	assert.NoError(t, err)
-
-	cleanupSampleMigrator(t, conn)
 
 	var currentUser string
 	err = conn.QueryRow(context.Background(), "select current_user").Scan(&currentUser)
@@ -28,6 +29,19 @@ func connectConn(t testing.TB) *pgx.Conn {
 	assert.NoError(t, err)
 
 	return conn
+}
+
+func prepareDatabase(t testing.TB) {
+	connString, _ := os.LookupEnv("MIGRATE_TEST_DATABASE")
+	require.NotEqualf(t, "", connString, "MIGRATE_TEST_DATABASE must be set")
+
+	cmd := exec.Command("dropdb", connString)
+	output, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "dropdb failed with output: %s", string(output))
+
+	cmd = exec.Command("createdb", connString)
+	output, err = cmd.CombinedOutput()
+	require.NoErrorf(t, err, "createdb failed with output: %s", string(output))
 }
 
 func currentVersion(t testing.TB, conn *pgx.Conn) int32 {
@@ -67,13 +81,6 @@ func createSampleMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 	m.AppendMigration("Create t2", "create table t2(id serial);")
 	m.AppendMigration("Create t3", "create table t3(id serial);")
 	return m
-}
-
-func cleanupSampleMigrator(t testing.TB, conn *pgx.Conn) {
-	tables := []string{versionTable, "t1", "t2", "t3"}
-	for _, table := range tables {
-		mustExec(t, conn, "drop table if exists "+table)
-	}
 }
 
 func TestNewMigrator(t *testing.T) {
