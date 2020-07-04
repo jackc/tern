@@ -115,7 +115,7 @@ func TestAppendMigration(t *testing.T) {
 
 	assert.Len(t, m.Migrations, 1)
 	assert.Equal(t, m.Migrations[0].Name, name)
-	assert.Equal(t, m.Migrations[0].UpSQL, upSQL)
+	assert.Equal(t, m.Migrations[0].SQL, upSQL)
 }
 
 func TestLoadMigrationsMissingDirectory(t *testing.T) {
@@ -159,21 +159,21 @@ func TestLoadMigrations(t *testing.T) {
 	assert.Equal(t, "001_create_t1.sql", m.Migrations[0].Name)
 	assert.Equal(t, `create table t1(
   id serial primary key
-);`, m.Migrations[0].UpSQL)
+);`, m.Migrations[0].SQL)
 
 	assert.Equal(t, "002_create_t2.sql", m.Migrations[1].Name)
 	assert.Equal(t, `create table t2(
   id serial primary key
-);`, m.Migrations[1].UpSQL)
+);`, m.Migrations[1].SQL)
 
 	assert.Equal(t, "003_irreversible.sql", m.Migrations[2].Name)
-	assert.Equal(t, "drop table t2;", m.Migrations[2].UpSQL)
+	assert.Equal(t, "drop table t2;", m.Migrations[2].SQL)
 
 	assert.Equal(t, "004_data_interpolation.sql", m.Migrations[3].Name)
-	assert.Equal(t, "create table foo_bar(id serial primary key);", m.Migrations[3].UpSQL)
+	assert.Equal(t, "create table foo_bar(id serial primary key);", m.Migrations[3].SQL)
 
 	assert.Equal(t, "006_sprig.sql", m.Migrations[5].Name)
-	assert.Equal(t, "create table baz_42(id serial primary key);", m.Migrations[5].UpSQL)
+	assert.Equal(t, "create table baz_42(id serial primary key);", m.Migrations[5].SQL)
 }
 
 func TestLoadMigrationsNoForward(t *testing.T) {

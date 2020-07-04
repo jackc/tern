@@ -53,7 +53,7 @@ type MigrationPgError struct {
 type Migration struct {
 	Sequence int32
 	Name     string
-	UpSQL    string
+	SQL      string
 }
 
 type MigratorOptions struct {
@@ -245,7 +245,7 @@ func (m *Migrator) AppendMigration(name, upSQL string) {
 		&Migration{
 			Sequence: int32(len(m.Migrations)) + 1,
 			Name:     name,
-			UpSQL:    upSQL,
+			SQL:      upSQL,
 		})
 	return
 }
@@ -308,7 +308,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		var sequence int32
 		current = m.Migrations[currentVersion]
 		sequence = current.Sequence
-		sql = current.UpSQL
+		sql = current.SQL
 
 		var tx pgx.Tx
 		if !m.options.DisableTx {
