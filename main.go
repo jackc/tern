@@ -680,13 +680,6 @@ func LoadConfig() (*Config, error) {
 }
 
 func appendConfigFromFile(config *Config, path string) error {
-	// Accessing the environment through this map is deprecated now that the env function from sprig is available.
-	env := make(map[string]string)
-	for _, s := range os.Environ() {
-		parts := strings.SplitN(s, "=", 2)
-		env[parts[0]] = parts[1]
-	}
-
 	fileBytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
@@ -698,9 +691,7 @@ func appendConfigFromFile(config *Config, path string) error {
 	}
 
 	var buf bytes.Buffer
-	err = confTemplate.Execute(&buf, map[string]interface{}{
-		"env": env,
-	})
+	err = confTemplate.Execute(&buf, map[string]interface{}{})
 	if err != nil {
 		return err
 	}

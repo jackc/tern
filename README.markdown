@@ -288,6 +288,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 ## Unreleased 2
 
 * Down steps in migrations are no longer supported.
+* Remove deprecated env access syntax in config file.
 
 ## 1.12.1 (June 27, 2020)
 
