@@ -289,6 +289,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 * Down steps in migrations are no longer supported.
 * Remove deprecated env access syntax in config file.
+* Replace MigratorFS interface with http.FileSystem for easier integration with static file bundling tools.
 
 ## 1.12.1 (June 27, 2020)
 

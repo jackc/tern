@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -28,10 +29,10 @@ func (cp *CodePackage) Eval(data map[string]interface{}) (string, error) {
 	return buf.String(), nil
 }
 
-func findCodeFiles(dirname string, fs MigratorFS) ([]string, error) {
+func findCodeFiles(dirname string, fs http.FileSystem) ([]string, error) {
 	dirname = strings.TrimRight(dirname, string(filepath.Separator))
 
-	entries, err := fs.ReadDir(dirname)
+	entries, err := fsReadDir(fs, dirname)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func findCodeFiles(dirname string, fs MigratorFS) ([]string, error) {
 	return results, nil
 }
 
-func LoadCodePackageEx(path string, fs MigratorFS) (*CodePackage, error) {
+func LoadCodePackageEx(path string, fs http.FileSystem) (*CodePackage, error) {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
 	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
@@ -70,7 +71,7 @@ func LoadCodePackageEx(path string, fs MigratorFS) (*CodePackage, error) {
 	}
 
 	for _, p := range sqlPaths {
-		body, err := fs.ReadFile(p)
+		body, err := fsReadFile(fs, p)
 		if err != nil {
 			return nil, err
 		}

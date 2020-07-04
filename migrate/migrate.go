@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"text/template"
@@ -60,7 +61,7 @@ type MigratorOptions struct {
 	// DisableTx causes the Migrator not to run migrations in a transaction.
 	DisableTx bool
 	// MigratorFS is the interface used for collecting the migrations.
-	MigratorFS MigratorFS
+	MigratorFS http.FileSystem
 }
 
 type Migrator struct {
@@ -86,35 +87,21 @@ func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opt
 	return
 }
 
-type MigratorFS interface {
-	ReadDir(dirname string) ([]os.FileInfo, error)
-	ReadFile(filename string) ([]byte, error)
-	Glob(pattern string) (matches []string, err error)
-}
-
 type defaultMigratorFS struct{}
 
-func (defaultMigratorFS) ReadDir(dirname string) ([]os.FileInfo, error) {
-	return ioutil.ReadDir(dirname)
+func (defaultMigratorFS) Open(name string) (http.File, error) {
+	return os.Open(name)
 }
 
-func (defaultMigratorFS) ReadFile(filename string) ([]byte, error) {
-	return ioutil.ReadFile(filename)
-}
-
-func (defaultMigratorFS) Glob(pattern string) ([]string, error) {
-	return filepath.Glob(pattern)
-}
-
-func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
+func FindMigrationsEx(path string, fs http.FileSystem) ([]string, error) {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
-	fileInfos, err := fs.ReadDir(path)
+	fileInfos, err := fsReadDir(fs, path)
 	if err != nil {
 		return nil, err
 	}
 
-	paths := make([]string, 0, len(fileInfos))
+	possiblePaths := make([]string, 0, len(fileInfos))
 	for _, fi := range fileInfos {
 		if fi.IsDir() {
 			continue
@@ -125,6 +112,13 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 			continue
 		}
 
+		possiblePaths = append(possiblePaths, fi.Name())
+	}
+	sort.Strings(possiblePaths)
+
+	paths := make([]string, 0, len(fileInfos))
+	for _, pp := range possiblePaths {
+		matches := migrationPattern.FindStringSubmatch(pp)
 		n, err := strconv.ParseInt(matches[1], 10, 32)
 		if err != nil {
 			// The regexp already validated that the prefix is all digits so this *should* never fail
@@ -139,7 +133,7 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 			return nil, fmt.Errorf("Missing migration %d", len(paths)+1)
 		}
 
-		paths = append(paths, filepath.Join(path, fi.Name()))
+		paths = append(paths, filepath.Join(path, pp))
 	}
 
 	return paths, nil
@@ -147,6 +141,23 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 
 func FindMigrations(path string) ([]string, error) {
 	return FindMigrationsEx(path, defaultMigratorFS{})
+}
+
+func (m *Migrator) findSharePaths(path string) ([]string, error) {
+	filePaths, err := fsFiles(m.options.MigratorFS, path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	pattern := path + "/*/*.sql"
+	var matches []string
+	for _, s := range filePaths {
+		if matched, _ := filepath.Match(pattern, s); matched {
+			matches = append(matches, s)
+		}
+	}
+
+	return matches, nil
 }
 
 func (m *Migrator) LoadMigrations(path string) error {
@@ -165,13 +176,13 @@ func (m *Migrator) LoadMigrations(path string) error {
 		},
 	)
 
-	sharedPaths, err := m.options.MigratorFS.Glob(filepath.Join(path, "*", "*.sql"))
+	sharedPaths, err := m.findSharePaths(path)
 	if err != nil {
 		return err
 	}
 
 	for _, p := range sharedPaths {
-		body, err := m.options.MigratorFS.ReadFile(p)
+		body, err := fsReadFile(m.options.MigratorFS, p)
 		if err != nil {
 			return err
 		}
@@ -193,7 +204,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 	}
 
 	for _, p := range paths {
-		body, err := m.options.MigratorFS.ReadFile(p)
+		body, err := fsReadFile(m.options.MigratorFS, p)
 		if err != nil {
 			return err
 		}
