@@ -379,11 +379,14 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 	}
 
 	_, err = m.conn.Exec(ctx, fmt.Sprintf(`
-    create table if not exists %s(version int4 not null);
+    create table if not exists %[1]s(
+			version int4 not null check (version >= 0)
+		);
 
-    insert into %s(version)
-    select 0
-    where 0=(select count(*) from %s);
-  `, m.versionTable, m.versionTable, m.versionTable))
+		create unique index on %[1]s (((1)));
+
+		insert into %[1]s(version) values (0)
+		on conflict do nothing;
+  `, m.versionTable))
 	return err
 }

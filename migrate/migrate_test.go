@@ -243,11 +243,6 @@ func TestMigrateToBoundaries(t *testing.T) {
 	err = m.MigrateTo(context.Background(), int32(len(m.Migrations))+1)
 	require.EqualError(t, err, "destination version 4 is outside the valid versions of 0 to 3")
 
-	// When schema version says it is negative
-	mustExec(t, conn, "update "+versionTable+" set version=-1")
-	err = m.MigrateTo(context.Background(), int32(1))
-	require.EqualError(t, err, "current version -1 is less than 0")
-
 	// When schema version is past last version
 	mustExec(t, conn, "update "+versionTable+" set version=4")
 	err = m.MigrateTo(context.Background(), int32(3))
