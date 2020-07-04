@@ -54,7 +54,6 @@ type Migration struct {
 	Sequence int32
 	Name     string
 	UpSQL    string
-	DownSQL  string
 }
 
 type MigratorOptions struct {
@@ -69,8 +68,8 @@ type Migrator struct {
 	versionTable string
 	options      *MigratorOptions
 	Migrations   []*Migration
-	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and SQL
-	Data         map[string]interface{}              // Data available to use in migrations
+	OnStart      func(sequence int32, name string, sql string) // OnStart is called when a migration is run.
+	Data         map[string]interface{}                        // Data available to use in migrations
 }
 
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
@@ -199,9 +198,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 			return err
 		}
 
-		pieces := strings.SplitN(string(body), "---- create above / drop below ----", 2)
-		var upSQL, downSQL string
-		upSQL = strings.TrimSpace(pieces[0])
+		upSQL := strings.TrimSpace(string(body))
 		upSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" up"), upSQL)
 		if err != nil {
 			return err
@@ -221,15 +218,7 @@ func (m *Migrator) LoadMigrations(path string) error {
 			return ErrNoFwMigration
 		}
 
-		if len(pieces) == 2 {
-			downSQL = strings.TrimSpace(pieces[1])
-			downSQL, err = m.evalMigration(mainTmpl.New(filepath.Base(p)+" down"), downSQL)
-			if err != nil {
-				return err
-			}
-		}
-
-		m.AppendMigration(filepath.Base(p), upSQL, downSQL)
+		m.AppendMigration(filepath.Base(p), upSQL)
 	}
 
 	return nil
@@ -250,14 +239,13 @@ func (m *Migrator) evalMigration(tmpl *template.Template, sql string) (string, e
 	return buf.String(), nil
 }
 
-func (m *Migrator) AppendMigration(name, upSQL, downSQL string) {
+func (m *Migrator) AppendMigration(name, upSQL string) {
 	m.Migrations = append(
 		m.Migrations,
 		&Migration{
 			Sequence: int32(len(m.Migrations)) + 1,
 			Name:     name,
 			UpSQL:    upSQL,
-			DownSQL:  downSQL,
 		})
 	return
 }
@@ -299,41 +287,28 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		return err
 	}
 
-	if targetVersion < 0 || int32(len(m.Migrations)) < targetVersion {
-		errMsg := fmt.Sprintf("destination version %d is outside the valid versions of 0 to %d", targetVersion, len(m.Migrations))
+	if currentVersion < 0 {
+		errMsg := fmt.Sprintf("current version %d is less than 0", currentVersion)
 		return BadVersionError(errMsg)
 	}
 
-	if currentVersion < 0 || int32(len(m.Migrations)) < currentVersion {
-		errMsg := fmt.Sprintf("current version %d is outside the valid versions of 0 to %d", currentVersion, len(m.Migrations))
+	if int32(len(m.Migrations)) < currentVersion {
+		errMsg := fmt.Sprintf("current version %d is greater than last version of %d", currentVersion, len(m.Migrations))
 		return BadVersionError(errMsg)
 	}
 
-	var direction int32
-	if currentVersion < targetVersion {
-		direction = 1
-	} else {
-		direction = -1
+	if targetVersion < currentVersion || int32(len(m.Migrations)) < targetVersion {
+		errMsg := fmt.Sprintf("destination version %d is outside the valid versions of %d to %d", targetVersion, currentVersion, len(m.Migrations))
+		return BadVersionError(errMsg)
 	}
 
-	for currentVersion != targetVersion {
+	for ; currentVersion != targetVersion; currentVersion++ {
 		var current *Migration
-		var sql, directionName string
+		var sql string
 		var sequence int32
-		if direction == 1 {
-			current = m.Migrations[currentVersion]
-			sequence = current.Sequence
-			sql = current.UpSQL
-			directionName = "up"
-		} else {
-			current = m.Migrations[currentVersion-1]
-			sequence = current.Sequence - 1
-			sql = current.DownSQL
-			directionName = "down"
-			if current.DownSQL == "" {
-				return IrreversibleMigrationError{m: current}
-			}
-		}
+		current = m.Migrations[currentVersion]
+		sequence = current.Sequence
+		sql = current.UpSQL
 
 		var tx pgx.Tx
 		if !m.options.DisableTx {
@@ -346,7 +321,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 
 		// Fire on start callback
 		if m.OnStart != nil {
-			m.OnStart(current.Sequence, current.Name, directionName, sql)
+			m.OnStart(current.Sequence, current.Name, sql)
 		}
 
 		// Execute the migration
@@ -373,8 +348,6 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 				return err
 			}
 		}
-
-		currentVersion = currentVersion + direction
 	}
 
 	return nil

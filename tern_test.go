@@ -119,6 +119,19 @@ func tern(t *testing.T, args ...string) string {
 	return string(output)
 }
 
+func prepareDatabase(t *testing.T) {
+	testDatabase, _ := os.LookupEnv("TERN_TEST_DATABASE")
+	require.NotEqualf(t, "", testDatabase, "TERN_TEST_DATABASE must be set")
+
+	cmd := exec.Command("dropdb", testDatabase)
+	output, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "dropdb failed with output: %s", string(output))
+
+	cmd = exec.Command("createdb", testDatabase)
+	output, err = cmd.CombinedOutput()
+	require.NoErrorf(t, err, "createdb failed with output: %s", string(output))
+}
+
 func TestInitWithoutDirectory(t *testing.T) {
 	defer func() {
 		os.Remove("tern.conf")
@@ -178,16 +191,13 @@ func TestMigrate(t *testing.T) {
 		expectedNotExists []string
 		expectedVersion   int32
 	}{
-		{[]string{"-d", "0"}, []string{}, []string{"t1", "t2"}, 0},
-		{[]string{}, []string{"t1", "t2"}, []string{}, 2},
 		{[]string{"-d", "1"}, []string{"t1"}, []string{"t2"}, 1},
-		{[]string{"-d", "-1"}, []string{}, []string{"t1", "t2"}, 0},
-		{[]string{"-d", "+1"}, []string{"t1"}, []string{"t2"}, 1},
-		{[]string{"-d", "+1"}, []string{"t1", "t2"}, []string{}, 2},
-		{[]string{"-d", "-+1"}, []string{"t1", "t2"}, []string{}, 2},
+		{[]string{"-d", "2"}, []string{"t1", "t2"}, []string{}, 2},
 	}
 
 	for i, tt := range tests {
+		prepareDatabase(t)
+
 		baseArgs := []string{"migrate", "-m", "testdata", "-c", "testdata/tern.conf"}
 		args := append(baseArgs, tt.args...)
 
@@ -212,39 +222,32 @@ func TestMigrate(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
-	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	prepareDatabase(t)
 
 	output := tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
 	expected := `status:   migration(s) pending
 version:  0 of 2`
-	if !strings.Contains(output, expected) {
-		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
-	}
+	require.Contains(t, output, expected)
 
-	// Up all the way
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf")
-
-	output = tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
-	expected = `status:   up to date
-version:  2 of 2`
-	if !strings.Contains(output, expected) {
-		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
-	}
-
-	// Back one
 	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "1")
 
 	output = tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
 	expected = `status:   migration(s) pending
 version:  1 of 2`
-	if !strings.Contains(output, expected) {
-		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
-	}
+	require.Contains(t, output, expected)
+
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf")
+
+	output = tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	expected = `status:   up to date
+version:  2 of 2`
+	require.Contains(t, output, expected)
 }
 
 func TestInstallCode(t *testing.T) {
-	tern(t, "install-code", "-c", "testdata/tern.conf", "testdata/code")
+	prepareDatabase(t)
+
+	tern(t, "code", "install", "-c", "testdata/tern.conf", "testdata/code")
 
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
@@ -256,8 +259,7 @@ func TestInstallCode(t *testing.T) {
 }
 
 func TestCLIArgsWithoutConfigFile(t *testing.T) {
-	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	prepareDatabase(t)
 
 	connConfig, err := readConfig("testdata/tern.conf")
 	if err != nil {
@@ -280,8 +282,7 @@ version:  0 of 2`
 }
 
 func TestConfigFileTemplateEvalWithEnvVar(t *testing.T) {
-	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	prepareDatabase(t)
 
 	connConfig, err := readConfig("testdata/tern.conf")
 	if err != nil {
@@ -315,8 +316,7 @@ version:  0 of 2`
 }
 
 func TestConfigFileTemplateEvalWithDeprecatedEnvVar(t *testing.T) {
-	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	prepareDatabase(t)
 
 	connConfig, err := readConfig("testdata/tern.conf")
 	if err != nil {

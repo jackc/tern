@@ -68,18 +68,9 @@ create table people(
   first_name varchar not null,
   last_name varchar not null
 );
-
----- create above / drop below ----
-
-drop table people;
 `
 
 var newMigrationText = `-- Write your migrate up statements here
-
----- create above / drop below ----
-
--- Write your migrate down statements here. If this migration is irreversible
--- Then delete the separator line above.
 `
 
 type Config struct {
@@ -186,18 +177,6 @@ Destination migration version can be one of the following value types:
 An integer:
   Migrate to a specific migration.
   e.g. tern migrate -d 42
-
-"+" and an integer:
-  Migrate forward N steps.
-  e.g. tern migrate -d +3
-
-"-" and an integer:
-  Migrate backward N steps.
-  e.g. tern migrate -d -2
-
-"-+" and an integer:
-  Redo previous N steps (migrate backward N steps then forward N steps).
-  e.g. tern migrate -d -+1
 
 The word "last":
   Migrate to the most recent migration. This is the default value, so it is
@@ -426,8 +405,8 @@ func Migrate(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	migrator.OnStart = func(sequence int32, name, direction, sql string) {
-		fmt.Printf("%s executing %s %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), name, direction, sql)
+	migrator.OnStart = func(sequence int32, name, sql string) {
+		fmt.Printf("%s executing %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), name, sql)
 	}
 
 	var currentVersion int32

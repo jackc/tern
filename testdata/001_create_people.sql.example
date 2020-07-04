@@ -5,7 +5,3 @@ create table people(
   first_name varchar not null,
   last_name varchar not null
 );
-
----- create above / drop below ----
-
-drop table people;

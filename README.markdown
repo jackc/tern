@@ -106,10 +106,7 @@ To create a new migration:
 
 This will create a migration file with the given name prefixed by the next available sequence number (e.g. 001, 002, 003).
 
-The migrations themselves have an extremely simple file format. They are
-simply the up and down SQL statements divided by a magic comment.
-
-    ---- create above / drop below ----
+The migrations themselves have an extremely simple file format. They are SQL with a few optional extensions.
 
 Example:
 
@@ -117,17 +114,6 @@ Example:
 create table t1(
   id serial primary key
 );
-
----- create above / drop below ----
-
-drop table t1;
-```
-
-If a migration is irreversible such as a drop table, simply delete the magic
-comment.
-
-```sql
-drop table widgets;
 ```
 
 To interpolate a custom data value from the config file prefix the name with a
@@ -167,21 +153,9 @@ the same directory simply run tern:
 
     tern migrate
 
-To migrate up or down to a specific version:
+To migrate up to a specific version:
 
     tern migrate --destination 42
-
-To migrate up N versions:
-
-    tern migrate --destination +3
-
-To migrate down N versions:
-
-    tern migrate --destination -3
-
-To migrate down and rerun the previous N versions:
-
-    tern migrate --destination -+3
 
 To use a different config file:
 
@@ -312,6 +286,8 @@ is still available through RubyGems and the source code is on the ruby branch.
 ## Version History
 
 ## Unreleased 2
+
+* Down steps in migrations are no longer supported.
 
 ## 1.12.1 (June 27, 2020)
 

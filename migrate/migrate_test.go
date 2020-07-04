@@ -63,9 +63,9 @@ func createEmptyMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 
 func createSampleMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 	m := createEmptyMigrator(t, conn)
-	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
-	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
-	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
+	m.AppendMigration("Create t1", "create table t1(id serial);")
+	m.AppendMigration("Create t2", "create table t2(id serial);")
+	m.AppendMigration("Create t3", "create table t3(id serial);")
 	return m
 }
 
@@ -104,13 +104,11 @@ func TestAppendMigration(t *testing.T) {
 
 	name := "Create t"
 	upSQL := "create t..."
-	downSQL := "drop t..."
-	m.AppendMigration(name, upSQL, downSQL)
+	m.AppendMigration(name, upSQL)
 
 	assert.Len(t, m.Migrations, 1)
 	assert.Equal(t, m.Migrations[0].Name, name)
 	assert.Equal(t, m.Migrations[0].UpSQL, upSQL)
-	assert.Equal(t, m.Migrations[0].DownSQL, downSQL)
 }
 
 func TestLoadMigrationsMissingDirectory(t *testing.T) {
@@ -155,25 +153,20 @@ func TestLoadMigrations(t *testing.T) {
 	assert.Equal(t, `create table t1(
   id serial primary key
 );`, m.Migrations[0].UpSQL)
-	assert.Equal(t, "drop table t1;", m.Migrations[0].DownSQL)
 
 	assert.Equal(t, "002_create_t2.sql", m.Migrations[1].Name)
 	assert.Equal(t, `create table t2(
   id serial primary key
 );`, m.Migrations[1].UpSQL)
-	assert.Equal(t, "drop table t2;", m.Migrations[1].DownSQL)
 
 	assert.Equal(t, "003_irreversible.sql", m.Migrations[2].Name)
 	assert.Equal(t, "drop table t2;", m.Migrations[2].UpSQL)
-	assert.Equal(t, "", m.Migrations[2].DownSQL)
 
 	assert.Equal(t, "004_data_interpolation.sql", m.Migrations[3].Name)
 	assert.Equal(t, "create table foo_bar(id serial primary key);", m.Migrations[3].UpSQL)
-	assert.Equal(t, "drop table foo_bar;", m.Migrations[3].DownSQL)
 
 	assert.Equal(t, "006_sprig.sql", m.Migrations[5].Name)
 	assert.Equal(t, "create table baz_42(id serial primary key);", m.Migrations[5].UpSQL)
-	assert.Equal(t, "drop table baz_42;", m.Migrations[5].DownSQL)
 }
 
 func TestLoadMigrationsNoForward(t *testing.T) {
@@ -204,17 +197,9 @@ func TestMigrateToLifeCycle(t *testing.T) {
 	defer conn.Close(context.Background())
 	m := createSampleMigrator(t, conn)
 
-	var onStartCallUpCount int
-	var onStartCallDownCount int
-	m.OnStart = func(_ int32, _, direction, _ string) {
-		switch direction {
-		case "up":
-			onStartCallUpCount++
-		case "down":
-			onStartCallDownCount++
-		default:
-			t.Fatalf("Unexpected direction: %s", direction)
-		}
+	var onStartCallCount int
+	m.OnStart = func(_ int32, _, _ string) {
+		onStartCallCount++
 	}
 
 	// Migrate from 0 up to 1
@@ -224,8 +209,7 @@ func TestMigrateToLifeCycle(t *testing.T) {
 	assert.True(t, tableExists(t, conn, "t1"))
 	assert.False(t, tableExists(t, conn, "t2"))
 	assert.False(t, tableExists(t, conn, "t3"))
-	assert.EqualValues(t, 1, onStartCallUpCount)
-	assert.EqualValues(t, 0, onStartCallDownCount)
+	assert.EqualValues(t, 1, onStartCallCount)
 
 	// Migrate from 1 up to 3
 	err = m.MigrateTo(context.Background(), 3)
@@ -234,8 +218,7 @@ func TestMigrateToLifeCycle(t *testing.T) {
 	assert.True(t, tableExists(t, conn, "t1"))
 	assert.True(t, tableExists(t, conn, "t2"))
 	assert.True(t, tableExists(t, conn, "t3"))
-	assert.EqualValues(t, 3, onStartCallUpCount)
-	assert.EqualValues(t, 0, onStartCallDownCount)
+	assert.EqualValues(t, 3, onStartCallCount)
 
 	// Migrate from 3 to 3 is no-op
 	err = m.MigrateTo(context.Background(), 3)
@@ -244,38 +227,7 @@ func TestMigrateToLifeCycle(t *testing.T) {
 	assert.True(t, tableExists(t, conn, "t1"))
 	assert.True(t, tableExists(t, conn, "t2"))
 	assert.True(t, tableExists(t, conn, "t3"))
-	assert.EqualValues(t, 3, onStartCallUpCount)
-	assert.EqualValues(t, 0, onStartCallDownCount)
-
-	// Migrate from 3 down to 1
-	err = m.MigrateTo(context.Background(), 1)
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, currentVersion(t, conn))
-	assert.True(t, tableExists(t, conn, "t1"))
-	assert.False(t, tableExists(t, conn, "t2"))
-	assert.False(t, tableExists(t, conn, "t3"))
-	assert.EqualValues(t, 3, onStartCallUpCount)
-	assert.EqualValues(t, 2, onStartCallDownCount)
-
-	// Migrate from 1 down to 0
-	err = m.MigrateTo(context.Background(), 0)
-	require.NoError(t, err)
-	assert.EqualValues(t, 0, currentVersion(t, conn))
-	assert.False(t, tableExists(t, conn, "t1"))
-	assert.False(t, tableExists(t, conn, "t2"))
-	assert.False(t, tableExists(t, conn, "t3"))
-	assert.EqualValues(t, 3, onStartCallUpCount)
-	assert.EqualValues(t, 3, onStartCallDownCount)
-
-	// Migrate back up to 3
-	err = m.MigrateTo(context.Background(), 3)
-	require.NoError(t, err)
-	assert.EqualValues(t, 3, currentVersion(t, conn))
-	assert.True(t, tableExists(t, conn, "t1"))
-	assert.True(t, tableExists(t, conn, "t2"))
-	assert.True(t, tableExists(t, conn, "t3"))
-	assert.EqualValues(t, 6, onStartCallUpCount)
-	assert.EqualValues(t, 3, onStartCallDownCount)
+	assert.EqualValues(t, 3, onStartCallCount)
 }
 
 func TestMigrateToBoundaries(t *testing.T) {
@@ -294,25 +246,12 @@ func TestMigrateToBoundaries(t *testing.T) {
 	// When schema version says it is negative
 	mustExec(t, conn, "update "+versionTable+" set version=-1")
 	err = m.MigrateTo(context.Background(), int32(1))
-	require.EqualError(t, err, "current version -1 is outside the valid versions of 0 to 3")
+	require.EqualError(t, err, "current version -1 is less than 0")
 
-	// When schema version says it is negative
+	// When schema version is past last version
 	mustExec(t, conn, "update "+versionTable+" set version=4")
-	err = m.MigrateTo(context.Background(), int32(1))
-	require.EqualError(t, err, "current version 4 is outside the valid versions of 0 to 3")
-}
-
-func TestMigrateToIrreversible(t *testing.T) {
-	conn := connectConn(t)
-	defer conn.Close(context.Background())
-	m := createEmptyMigrator(t, conn)
-	m.AppendMigration("Foo", "drop table if exists t3", "")
-
-	err := m.MigrateTo(context.Background(), 1)
-	assert.NoError(t, err)
-
-	err = m.MigrateTo(context.Background(), 0)
-	require.EqualError(t, err, "Irreversible migration: 1 - Foo")
+	err = m.MigrateTo(context.Background(), int32(3))
+	require.EqualError(t, err, "current version 4 is greater than last version of 3")
 }
 
 func TestMigrateToDisableTx(t *testing.T) {
@@ -321,9 +260,9 @@ func TestMigrateToDisableTx(t *testing.T) {
 
 	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
 	assert.NoError(t, err)
-	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
-	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
-	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
+	m.AppendMigration("Create t1", "create table t1(id serial);")
+	m.AppendMigration("Create t2", "create table t2(id serial);")
+	m.AppendMigration("Create t3", "create table t3(id serial);")
 
 	tx, err := conn.Begin(context.Background())
 	assert.NoError(t, err)
@@ -386,16 +325,16 @@ func Example_OnStartMigrationProgressLogging() {
 		return
 	}
 
-	m.OnStart = func(_ int32, name, direction, _ string) {
-		fmt.Printf("Migrating %s: %s", direction, name)
+	m.OnStart = func(_ int32, name, _ string) {
+		fmt.Printf("Migrating: %s", name)
 	}
 
-	m.AppendMigration("create a table", "create temporary table foo(id serial primary key)", "")
+	m.AppendMigration("create a table", "create temporary table foo(id serial primary key)")
 
 	if err = m.Migrate(context.Background()); err != nil {
 		fmt.Printf("Unexpected failure migrating: %v", err)
 		return
 	}
 	// Output:
-	// Migrating up: create a table
+	// Migrating: create a table
 }
