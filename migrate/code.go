@@ -62,7 +62,7 @@ func findCodeFiles(dirname string, fs http.FileSystem) ([]string, error) {
 }
 
 func LoadCodePackageEx(path string, fs http.FileSystem) (*CodePackage, error) {
-	path = strings.TrimRight(path, string(filepath.Separator))
+	path = normalizeDirPath(path)
 
 	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
 	sqlPaths, err := findCodeFiles(path, fs)

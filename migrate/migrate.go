@@ -93,8 +93,16 @@ func (defaultMigratorFS) Open(name string) (http.File, error) {
 	return os.Open(name)
 }
 
+func normalizeDirPath(path string) string {
+	path = strings.TrimRight(path, "/")
+	if path == "" {
+		return "/"
+	}
+	return path
+}
+
 func FindMigrationsEx(path string, fs http.FileSystem) ([]string, error) {
-	path = strings.TrimRight(path, string(filepath.Separator))
+	path = normalizeDirPath(path)
 
 	fileInfos, err := fsReadDir(fs, path)
 	if err != nil {
@@ -161,7 +169,7 @@ func (m *Migrator) findSharePaths(path string) ([]string, error) {
 }
 
 func (m *Migrator) LoadMigrations(path string) error {
-	path = strings.TrimRight(path, string(filepath.Separator))
+	path = normalizeDirPath(path)
 
 	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap()).Funcs(
 		template.FuncMap{
