@@ -405,7 +405,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	migrator.OnStart = func(sequence int32, name, sql string) {
+	migrator.OnStart = func(ctx context.Context, sequence int32, name, sql string) {
 		fmt.Printf("%s executing %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), name, sql)
 	}
 

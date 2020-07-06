@@ -205,7 +205,7 @@ func TestMigrateToLifeCycle(t *testing.T) {
 	m := createSampleMigrator(t, conn)
 
 	var onStartCallCount int
-	m.OnStart = func(_ int32, _, _ string) {
+	m.OnStart = func(_ context.Context, _ int32, _, _ string) {
 		onStartCallCount++
 	}
 
@@ -327,7 +327,7 @@ func Example_OnStartMigrationProgressLogging() {
 		return
 	}
 
-	m.OnStart = func(_ int32, name, _ string) {
+	m.OnStart = func(_ context.Context, _ int32, name, _ string) {
 		fmt.Printf("Migrating: %s", name)
 	}
 

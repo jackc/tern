@@ -69,8 +69,8 @@ type Migrator struct {
 	versionTable string
 	options      *MigratorOptions
 	Migrations   []*Migration
-	OnStart      func(sequence int32, name string, sql string) // OnStart is called when a migration is run.
-	Data         map[string]interface{}                        // Data available to use in migrations
+	OnStart      func(ctx context.Context, sequence int32, name string, sql string) // OnStart is called when a migration is run.
+	Data         map[string]interface{}                                             // Data available to use in migrations
 }
 
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
@@ -340,7 +340,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 
 		// Fire on start callback
 		if m.OnStart != nil {
-			m.OnStart(current.Sequence, current.Name, sql)
+			m.OnStart(ctx, current.Sequence, current.Name, sql)
 		}
 
 		// Execute the migration
