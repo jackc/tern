@@ -22,6 +22,7 @@ type CodeInstallPgError struct {
 }
 
 type CodePackage struct {
+	schema   string
 	tmpl     *template.Template
 	manifest []string
 }
@@ -135,7 +136,7 @@ func LoadCodePackageEx(path string, fs http.FileSystem) (*CodePackage, error) {
 		}
 	}
 
-	codePackage := &CodePackage{tmpl: mainTmpl, manifest: manifest}
+	codePackage := &CodePackage{schema: filepath.Base(path), tmpl: mainTmpl, manifest: manifest}
 
 	return codePackage, nil
 }
@@ -161,6 +162,26 @@ func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[strin
 		return err
 	}
 	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, fmt.Sprintf("drop schema if exists %s cascade", codePackage.schema))
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, fmt.Sprintf("create schema %s", codePackage.schema))
+	if err != nil {
+		return err
+	}
+
+	var searchPath string
+	err = tx.QueryRow(ctx, "show search_path").Scan(&searchPath)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, fmt.Sprintf("set local search_path to %s, %s", codePackage.schema, searchPath))
+	if err != nil {
+		return err
+	}
 
 	for _, s := range codePackage.manifest {
 		sql, err := codePackage.Eval(s, mergeData)

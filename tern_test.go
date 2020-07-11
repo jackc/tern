@@ -253,7 +253,7 @@ func TestInstallCode(t *testing.T) {
 	defer conn.Close(context.Background())
 
 	var n int
-	err := conn.QueryRow(context.Background(), "select add(1,2)").Scan(&n)
+	err := conn.QueryRow(context.Background(), "select code.add(1,2)").Scan(&n)
 	require.NoError(t, err)
 	assert.Equal(t, 3, n)
 }

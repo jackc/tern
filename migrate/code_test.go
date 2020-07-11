@@ -32,11 +32,11 @@ func TestInstallCodePackage(t *testing.T) {
 	require.NoError(t, err)
 
 	var n int
-	err = conn.QueryRow(context.Background(), "select add(1,2)").Scan(&n)
+	err = conn.QueryRow(context.Background(), "select code.add(1,2)").Scan(&n)
 	require.NoError(t, err)
 	assert.Equal(t, 3, n)
 
-	err = conn.QueryRow(context.Background(), "select magic_number()").Scan(&n)
+	err = conn.QueryRow(context.Background(), "select code.magic_number()").Scan(&n)
 	require.NoError(t, err)
 	assert.Equal(t, 42, n)
 }

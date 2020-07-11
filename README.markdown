@@ -189,9 +189,6 @@ For example given a directory `code` containing the following files:
 
 ```
 -- install.sql
-drop schema if exists code cascade;
-create schema code;
-
 {{ template "a.sql" . }}
 {{ template "b.sql" . }}
 {{ template "c.sql" . }}
@@ -199,17 +196,17 @@ create schema code;
 
 ```
 -- a.sql
-create view code.a as select ...;
+create view a as select ...;
 ```
 
 ```
 -- b.sql
-create view code.b as select * from code.a where ...;
+create view b as select * from a where ...;
 ```
 
 ```
 -- c.sql
-create view code.c as select * from code.b where ...;
+create view c as select * from b where ...;
 ```
 
 Then this command would install the package into the database.
@@ -221,8 +218,8 @@ tern code install path/to/code --config path/to/tern.conf
 Code packages have access to data variables defined in your configuration file as well as functions provided by
 [Sprig](http://masterminds.github.io/sprig/).
 
-It is recommended but not required for each code package to be installed into its own PostgreSQL schema. This schema
-could be determined by environment variable as part of a blue / green deployment process.
+Each code package is installed into its own PostgreSQL schema. The schema name is determined by the directory name. Any
+existing schema by that name will be dropped.
 
 ## Template Tips
 
@@ -285,6 +282,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 * Replace MigratorFS interface with http.FileSystem for easier integration with static file bundling tools.
 * Remove snapshot code command.
 * Code packages use manifest.conf instead of install.sql.
+* Code packages are always installed into a schema.
 
 ## 1.12.1 (June 27, 2020)
 
