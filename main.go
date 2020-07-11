@@ -470,7 +470,7 @@ func fprintPgErrorDetails(w io.Writer, err error) {
 			fmt.Fprintf(w, "%s^\n", padding)
 		}
 	case migrate.CodeInstallPgError:
-		fmt.Fprintln(w, "FILE:", err.File)
+		fmt.Fprintln(w, "FILE:", err.CodeFile)
 
 		if err.Detail != "" {
 			fmt.Fprintln(w, "DETAIL:", err.Detail)

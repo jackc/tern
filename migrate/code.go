@@ -16,8 +16,8 @@ import (
 )
 
 type CodeInstallPgError struct {
-	File string
-	SQL  string
+	CodeFile string
+	SQL      string
 	*pgconn.PgError
 }
 
@@ -191,7 +191,7 @@ func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[strin
 		_, err = tx.Exec(ctx, sql)
 		if err != nil {
 			if err, ok := err.(*pgconn.PgError); ok {
-				return CodeInstallPgError{File: s, SQL: sql, PgError: err}
+				return CodeInstallPgError{CodeFile: s, SQL: sql, PgError: err}
 			}
 			return err
 		}
