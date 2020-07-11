@@ -171,18 +171,7 @@ func (m *Migrator) findSharePaths(path string) ([]string, error) {
 func (m *Migrator) LoadMigrations(path string) error {
 	path = normalizeDirPath(path)
 
-	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap()).Funcs(
-		template.FuncMap{
-			"install_snapshot": func(name string) (string, error) {
-				codePackage, err := LoadCodePackageEx(filepath.Join(path, "snapshots", name), m.options.MigratorFS)
-				if err != nil {
-					return "", err
-				}
-
-				return codePackage.Eval(m.Data)
-			},
-		},
-	)
+	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
 
 	sharedPaths, err := m.findSharePaths(path)
 	if err != nil {

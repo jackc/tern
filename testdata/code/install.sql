@@ -1,1 +1,0 @@
-{{ template "add.sql" . }}

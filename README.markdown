@@ -181,10 +181,9 @@ depends on view `a`. A change to `a` may require the following steps:
 In addition to the challenge of manually building such a migration it is difficult to use version control to see the
 changes in a particular database object over time when its definition is scattered through multiple migrations.
 
-A solution to this is code packages. A code package is a directory with an `install.sql` file that contains the
+A solution to this is code packages. A code package is a directory with an `manifest.conf` file that contains the
 instructions to completely drop and recreate a set of database code. The command `code install` can be used to directly
-install a code package (especially useful during development) and the `code snapshot` command can be used to make a
-single migration that installs that code package.
+install a code package (especially useful during development).
 
 For example given a directory `code` containing the following files:
 
@@ -217,12 +216,6 @@ Then this command would install the package into the database.
 
 ```
 tern code install path/to/code --config path/to/tern.conf
-```
-
-And this command would create a migration from the current state of the code package.
-
-```
-tern code snapshot path/to/code --migrations path/to/migrations
 ```
 
 Code packages have access to data variables defined in your configuration file as well as functions provided by
@@ -290,6 +283,8 @@ is still available through RubyGems and the source code is on the ruby branch.
 * Down steps in migrations are no longer supported.
 * Remove deprecated env access syntax in config file.
 * Replace MigratorFS interface with http.FileSystem for easier integration with static file bundling tools.
+* Remove snapshot code command.
+* Code packages use manifest.conf instead of install.sql.
 
 ## 1.12.1 (June 27, 2020)
 

@@ -17,7 +17,7 @@ func TestLoadCodePackage(t *testing.T) {
 
 func TestLoadCodePackageNotCodePackage(t *testing.T) {
 	codePackage, err := migrate.LoadCodePackage("testdata/sample")
-	assert.EqualError(t, err, "install.sql not found")
+	assert.EqualError(t, err, "unable to load manifest: open testdata/sample/manifest.conf: no such file or directory")
 	assert.Nil(t, codePackage)
 }
 func TestInstallCodePackage(t *testing.T) {

@@ -1,9 +1,9 @@
 package migrate
 
 import (
+	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -16,12 +16,28 @@ import (
 )
 
 type CodePackage struct {
-	tmpl *template.Template
+	tmpl     *template.Template
+	manifest []string
 }
 
-func (cp *CodePackage) Eval(data map[string]interface{}) (string, error) {
+func (cp *CodePackage) EvalAll(data map[string]interface{}) (string, error) {
 	buf := &bytes.Buffer{}
-	err := cp.tmpl.Lookup("install.sql").Execute(buf, data)
+
+	for _, s := range cp.manifest {
+		fmt.Fprintf(buf, "-- %s\n\n", s)
+		sql, err := cp.Eval(s, data)
+		if err != nil {
+			return "", err
+		}
+		buf.WriteString(sql)
+	}
+
+	return buf.String(), nil
+}
+
+func (cp *CodePackage) Eval(tmplName string, data map[string]interface{}) (string, error) {
+	buf := &bytes.Buffer{}
+	err := cp.tmpl.Lookup(tmplName).Execute(buf, data)
 	if err != nil {
 		return "", err
 	}
@@ -61,8 +77,33 @@ func findCodeFiles(dirname string, fs http.FileSystem) ([]string, error) {
 	return results, nil
 }
 
+func loadManifest(dirname string, fs http.FileSystem) ([]string, error) {
+	buf, err := fsReadFile(fs, filepath.Join(dirname, "manifest.conf"))
+	if err != nil {
+		return nil, err
+	}
+
+	var filePaths []string
+
+	scanner := bufio.NewScanner(bytes.NewBuffer(buf))
+	for scanner.Scan() {
+		s := scanner.Text()
+		s = strings.TrimSpace(s)
+		if len(s) > 0 && s[0] != '#' {
+			filePaths = append(filePaths, s)
+		}
+	}
+
+	return filePaths, nil
+}
+
 func LoadCodePackageEx(path string, fs http.FileSystem) (*CodePackage, error) {
 	path = normalizeDirPath(path)
+
+	manifest, err := loadManifest(path, fs)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load manifest: %v", err)
+	}
 
 	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
 	sqlPaths, err := findCodeFiles(path, fs)
@@ -83,12 +124,7 @@ func LoadCodePackageEx(path string, fs http.FileSystem) (*CodePackage, error) {
 		}
 	}
 
-	installTmpl := mainTmpl.Lookup("install.sql")
-	if installTmpl == nil {
-		return nil, errors.New("install.sql not found")
-	}
-
-	codePackage := &CodePackage{tmpl: mainTmpl}
+	codePackage := &CodePackage{tmpl: mainTmpl, manifest: manifest}
 
 	return codePackage, nil
 }
@@ -98,15 +134,6 @@ func LoadCodePackage(path string) (*CodePackage, error) {
 }
 
 func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[string]interface{}, codePackage *CodePackage) (err error) {
-	sql, err := codePackage.Eval(mergeData)
-	if err != nil {
-		return err
-	}
-
-	return LockExecTx(ctx, conn, sql)
-}
-
-func LockExecTx(ctx context.Context, conn *pgx.Conn, sql string) (err error) {
 	err = acquireAdvisoryLock(ctx, conn)
 	if err != nil {
 		return err
@@ -124,14 +151,19 @@ func LockExecTx(ctx context.Context, conn *pgx.Conn, sql string) (err error) {
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, sql)
-	if err != nil {
-		if err, ok := err.(*pgconn.PgError); ok {
-			return MigrationPgError{Sql: sql, PgError: err}
+	for _, s := range codePackage.manifest {
+		sql, err := codePackage.Eval(s, mergeData)
+		if err != nil {
+			return err
 		}
-		return err
+		_, err = tx.Exec(ctx, sql)
+		if err != nil {
+			if err, ok := err.(*pgconn.PgError); ok {
+				return MigrationPgError{Sql: sql, PgError: err}
+			}
+			return err
+		}
 	}
 
 	return tx.Commit(ctx)
-
 }

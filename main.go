@@ -210,14 +210,6 @@ The word "last":
 	}
 	cmdCodeCompile.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
 
-	cmdCodeSnapshot := &cobra.Command{
-		Use:   "snapshot PATH",
-		Short: "Snapshot a code package into a migration",
-		Args:  cobra.ExactArgs(1),
-		Run:   SnapshotCode,
-	}
-	cmdCodeSnapshot.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
-
 	cmdStatus := &cobra.Command{
 		Use:   "status",
 		Short: "Print current migration status",
@@ -243,7 +235,6 @@ The word "last":
 
 	cmdCode.AddCommand(cmdCodeInstall)
 	cmdCode.AddCommand(cmdCodeCompile)
-	cmdCode.AddCommand(cmdCodeSnapshot)
 
 	rootCmd := &cobra.Command{Use: "tern", Short: "tern - PostgreSQL database migrator"}
 	rootCmd.AddCommand(cmdInit)
@@ -490,13 +481,7 @@ func InstallCode(cmd *cobra.Command, args []string) {
 	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
-	sql, err := codePackage.Eval(config.Data)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
-		os.Exit(1)
-	}
-
-	err = migrate.LockExecTx(ctx, conn, sql)
+	err = migrate.InstallCodePackage(ctx, conn, config.Data, codePackage)
 	if err != nil {
 		if err, ok := err.(migrate.MigrationPgError); ok {
 			fmt.Fprintln(os.Stderr, err)
@@ -545,56 +530,13 @@ func CompileCode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	sql, err := codePackage.Eval(config.Data)
+	sql, err := codePackage.EvalAll(config.Data)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Println(sql)
-}
-
-func SnapshotCode(cmd *cobra.Command, args []string) {
-	path := args[0]
-
-	_, err := migrate.LoadCodePackage(path)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
-		os.Exit(1)
-	}
-
-	migrationsPath := cliOptions.migrationsPath
-	migrations, err := migrate.FindMigrations(migrationsPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
-		os.Exit(1)
-	}
-
-	migrationID := fmt.Sprintf("%03d", len(migrations)+1)
-	snapshotPath := filepath.Join(migrationsPath, "snapshots", migrationID)
-	err = copyCodePackageDir(path, snapshotPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error copying snapshot:\n  %v\n", err)
-		os.Exit(1)
-	}
-
-	newMigrationName := fmt.Sprintf("%s_install_%s.sql", migrationID, filepath.Base(path))
-
-	// Write new migration
-	mPath := filepath.Join(migrationsPath, newMigrationName)
-	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	defer mFile.Close()
-
-	_, err = fmt.Fprintf(mFile, `{{ install_snapshot "%s" }}`, migrationID)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
 }
 
 func Status(cmd *cobra.Command, args []string) {
