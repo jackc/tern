@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"os"
@@ -444,27 +445,49 @@ func Migrate(cmd *cobra.Command, args []string) {
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-
-		if err, ok := err.(migrate.MigrationPgError); ok {
-			if err.Detail != "" {
-				fmt.Fprintln(os.Stderr, "DETAIL:", err.Detail)
-			}
-
-			if err.Position != 0 {
-				ele, err := ExtractErrorLine(err.Sql, int(err.Position))
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-					os.Exit(1)
-				}
-
-				prefix := fmt.Sprintf("LINE %d: ", ele.LineNum)
-				fmt.Fprintf(os.Stderr, "%s%s\n", prefix, ele.Text)
-
-				padding := strings.Repeat(" ", len(prefix)+ele.ColumnNum-1)
-				fmt.Fprintf(os.Stderr, "%s^\n", padding)
-			}
-		}
+		fprintPgErrorDetails(os.Stderr, err)
 		os.Exit(1)
+	}
+}
+
+func fprintPgErrorDetails(w io.Writer, err error) {
+	switch err := err.(type) {
+	case migrate.MigrationPgError:
+		if err.Detail != "" {
+			fmt.Fprintln(w, "DETAIL:", err.Detail)
+		}
+
+		if err.Position != 0 {
+			ele, err := ExtractErrorLine(err.Sql, int(err.Position))
+			if err != nil {
+				fmt.Fprintln(w, err)
+			}
+
+			prefix := fmt.Sprintf("LINE %d: ", ele.LineNum)
+			fmt.Fprintf(w, "%s%s\n", prefix, ele.Text)
+
+			padding := strings.Repeat(" ", len(prefix)+ele.ColumnNum-1)
+			fmt.Fprintf(w, "%s^\n", padding)
+		}
+	case migrate.CodeInstallPgError:
+		fmt.Fprintln(w, "FILE:", err.File)
+
+		if err.Detail != "" {
+			fmt.Fprintln(w, "DETAIL:", err.Detail)
+		}
+
+		if err.Position != 0 {
+			ele, err := ExtractErrorLine(err.SQL, int(err.Position))
+			if err != nil {
+				fmt.Fprintln(w, err)
+			}
+
+			prefix := fmt.Sprintf("LINE %d: ", ele.LineNum)
+			fmt.Fprintf(w, "%s%s\n", prefix, ele.Text)
+
+			padding := strings.Repeat(" ", len(prefix)+ele.ColumnNum-1)
+			fmt.Fprintf(w, "%s^\n", padding)
+		}
 	}
 }
 
@@ -483,28 +506,8 @@ func InstallCode(cmd *cobra.Command, args []string) {
 
 	err = migrate.InstallCodePackage(ctx, conn, config.Data, codePackage)
 	if err != nil {
-		if err, ok := err.(migrate.MigrationPgError); ok {
-			fmt.Fprintln(os.Stderr, err)
-			if err.Detail != "" {
-				fmt.Fprintln(os.Stderr, "DETAIL:", err.Detail)
-			}
-
-			if err.Position != 0 {
-				ele, err := ExtractErrorLine(err.Sql, int(err.Position))
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-					os.Exit(1)
-				}
-
-				prefix := fmt.Sprintf("LINE %d: ", ele.LineNum)
-				fmt.Fprintf(os.Stderr, "%s%s\n", prefix, ele.Text)
-
-				padding := strings.Repeat(" ", len(prefix)+ele.ColumnNum-1)
-				fmt.Fprintf(os.Stderr, "%s^\n", padding)
-			}
-		} else {
-			fmt.Fprintf(os.Stderr, "Failed to install code package:\n  %v\n", err)
-		}
+		fmt.Fprintln(os.Stderr, err)
+		fprintPgErrorDetails(os.Stderr, err)
 		os.Exit(1)
 	}
 }

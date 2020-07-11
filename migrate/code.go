@@ -15,6 +15,12 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
+type CodeInstallPgError struct {
+	File string
+	SQL  string
+	*pgconn.PgError
+}
+
 type CodePackage struct {
 	tmpl     *template.Template
 	manifest []string
@@ -164,7 +170,7 @@ func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[strin
 		_, err = tx.Exec(ctx, sql)
 		if err != nil {
 			if err, ok := err.(*pgconn.PgError); ok {
-				return MigrationPgError{Sql: sql, PgError: err}
+				return CodeInstallPgError{File: s, SQL: sql, PgError: err}
 			}
 			return err
 		}
