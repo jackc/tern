@@ -9,26 +9,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadCodePackage(t *testing.T) {
-	codePackage, err := migrate.LoadCodePackage("testdata/code")
+func TestLoadCodePackageSource(t *testing.T) {
+	codePackage, err := migrate.LoadCodePackageSource("testdata/code")
 	assert.NoError(t, err)
 	assert.NotNil(t, codePackage)
 }
 
-func TestLoadCodePackageNotCodePackage(t *testing.T) {
-	codePackage, err := migrate.LoadCodePackage("testdata/sample")
+func TestLoadCodePackageSourceNotCodePackage(t *testing.T) {
+	codePackage, err := migrate.LoadCodePackageSource("testdata/sample")
 	assert.EqualError(t, err, "unable to load manifest: open testdata/sample/manifest.conf: no such file or directory")
 	assert.Nil(t, codePackage)
 }
-func TestInstallCodePackage(t *testing.T) {
-	codePackage, err := migrate.LoadCodePackage("testdata/code")
+func TestCodePackageInstall(t *testing.T) {
+	codePackageSource, err := migrate.LoadCodePackageSource("testdata/code")
 	require.NoError(t, err)
-	require.NotNil(t, codePackage)
+	require.NotNil(t, codePackageSource)
+	codePackage, err := codePackageSource.Compile()
+	require.NoError(t, err)
 
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
 
-	err = migrate.InstallCodePackage(context.Background(), conn, map[string]interface{}{"magic_number": 42}, codePackage)
+	err = codePackage.Install(context.Background(), conn, map[string]interface{}{"magic_number": 42})
 	require.NoError(t, err)
 
 	var n int

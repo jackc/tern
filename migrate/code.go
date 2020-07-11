@@ -21,6 +21,30 @@ type CodeInstallPgError struct {
 	*pgconn.PgError
 }
 
+type CodePackageSource struct {
+	Schema     string
+	Manifest   []string
+	SourceCode map[string]string
+}
+
+func (cps *CodePackageSource) Compile() (*CodePackage, error) {
+	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
+	for name, source := range cps.SourceCode {
+		_, err := mainTmpl.New(name).Parse(string(source))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cp := &CodePackage{
+		schema:   cps.Schema,
+		manifest: cps.Manifest,
+		tmpl:     mainTmpl,
+	}
+
+	return cp, nil
+}
+
 type CodePackage struct {
 	schema   string
 	tmpl     *template.Template
@@ -109,7 +133,7 @@ func loadManifest(dirname string, fs http.FileSystem) ([]string, error) {
 	return filePaths, nil
 }
 
-func LoadCodePackageEx(path string, fs http.FileSystem) (*CodePackage, error) {
+func LoadCodePackageSourceEx(path string, fs http.FileSystem) (*CodePackageSource, error) {
 	path = normalizeDirPath(path)
 
 	manifest, err := loadManifest(path, fs)
@@ -117,35 +141,37 @@ func LoadCodePackageEx(path string, fs http.FileSystem) (*CodePackage, error) {
 		return nil, fmt.Errorf("unable to load manifest: %v", err)
 	}
 
-	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
 	sqlPaths, err := findCodeFiles(path, fs)
 	if err != nil {
 		return nil, err
 	}
 
+	sourceFiles := make(map[string]string, len(sqlPaths))
+
 	for _, p := range sqlPaths {
-		body, err := fsReadFile(fs, p)
+		source, err := fsReadFile(fs, p)
 		if err != nil {
 			return nil, err
 		}
 
 		name := strings.Replace(p, path+string(filepath.Separator), "", 1)
-		_, err = mainTmpl.New(name).Parse(string(body))
-		if err != nil {
-			return nil, err
-		}
+		sourceFiles[name] = string(source)
 	}
 
-	codePackage := &CodePackage{schema: filepath.Base(path), tmpl: mainTmpl, manifest: manifest}
+	cps := &CodePackageSource{
+		Schema:     filepath.Base(path),
+		Manifest:   manifest,
+		SourceCode: sourceFiles,
+	}
 
-	return codePackage, nil
+	return cps, nil
 }
 
-func LoadCodePackage(path string) (*CodePackage, error) {
-	return LoadCodePackageEx(path, defaultMigratorFS{})
+func LoadCodePackageSource(path string) (*CodePackageSource, error) {
+	return LoadCodePackageSourceEx(path, defaultMigratorFS{})
 }
 
-func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[string]interface{}, codePackage *CodePackage) (err error) {
+func (cpp *CodePackage) Install(ctx context.Context, conn *pgx.Conn, mergeData map[string]interface{}) (err error) {
 	err = acquireAdvisoryLock(ctx, conn)
 	if err != nil {
 		return err
@@ -163,12 +189,12 @@ func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[strin
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, fmt.Sprintf("drop schema if exists %s cascade", codePackage.schema))
+	_, err = tx.Exec(ctx, fmt.Sprintf("drop schema if exists %s cascade", cpp.schema))
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(ctx, fmt.Sprintf("create schema %s", codePackage.schema))
+	_, err = tx.Exec(ctx, fmt.Sprintf("create schema %s", cpp.schema))
 	if err != nil {
 		return err
 	}
@@ -178,13 +204,13 @@ func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[strin
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, fmt.Sprintf("set local search_path to %s, %s", codePackage.schema, searchPath))
+	_, err = tx.Exec(ctx, fmt.Sprintf("set local search_path to %s, %s", cpp.schema, searchPath))
 	if err != nil {
 		return err
 	}
 
-	for _, s := range codePackage.manifest {
-		sql, err := codePackage.Eval(s, mergeData)
+	for _, s := range cpp.manifest {
+		sql, err := cpp.Eval(s, mergeData)
 		if err != nil {
 			return err
 		}

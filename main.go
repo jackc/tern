@@ -494,9 +494,14 @@ func fprintPgErrorDetails(w io.Writer, err error) {
 func InstallCode(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	codePackage, err := migrate.LoadCodePackage(path)
+	codePackage, err := migrate.LoadCodePackageSource(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
+		os.Exit(1)
+	}
+	compiledCodePackage, err := codePackage.Compile()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to compile code package:\n  %v\n", err)
 		os.Exit(1)
 	}
 
@@ -504,7 +509,7 @@ func InstallCode(cmd *cobra.Command, args []string) {
 	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
-	err = migrate.InstallCodePackage(ctx, conn, config.Data, codePackage)
+	err = compiledCodePackage.Install(ctx, conn, config.Data)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		fprintPgErrorDetails(os.Stderr, err)
@@ -515,9 +520,14 @@ func InstallCode(cmd *cobra.Command, args []string) {
 func CompileCode(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	codePackage, err := migrate.LoadCodePackage(path)
+	codePackage, err := migrate.LoadCodePackageSource(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
+		os.Exit(1)
+	}
+	compiledCodePackage, err := codePackage.Compile()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to compile code package:\n  %v\n", err)
 		os.Exit(1)
 	}
 
@@ -535,13 +545,13 @@ func CompileCode(cmd *cobra.Command, args []string) {
 
 	var sql string
 	if len(args) == 1 {
-		sql, err = codePackage.EvalAll(config.Data)
+		sql, err = compiledCodePackage.EvalAll(config.Data)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
 			os.Exit(1)
 		}
 	} else {
-		sql, err = codePackage.Eval(args[1], config.Data)
+		sql, err = compiledCodePackage.Eval(args[1], config.Data)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
 			os.Exit(1)
