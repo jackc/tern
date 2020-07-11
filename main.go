@@ -203,9 +203,9 @@ The word "last":
 	addCoreConfigFlagsToCommand(cmdCodeInstall)
 
 	cmdCodeCompile := &cobra.Command{
-		Use:   "compile PATH",
+		Use:   "compile PATH [file]",
 		Short: "Compile a code package into SQL",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		Run:   CompileCode,
 	}
 	cmdCodeCompile.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
@@ -530,10 +530,19 @@ func CompileCode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	sql, err := codePackage.EvalAll(config.Data)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
-		os.Exit(1)
+	var sql string
+	if len(args) == 1 {
+		sql, err = codePackage.EvalAll(config.Data)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		sql, err = codePackage.Eval(args[1], config.Data)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to evaluate code package:\n  %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	fmt.Println(sql)

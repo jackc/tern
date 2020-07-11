@@ -36,8 +36,13 @@ func (cp *CodePackage) EvalAll(data map[string]interface{}) (string, error) {
 }
 
 func (cp *CodePackage) Eval(tmplName string, data map[string]interface{}) (string, error) {
+	tmpl := cp.tmpl.Lookup(tmplName)
+	if tmpl == nil {
+		return "", fmt.Errorf("cannot find template %s", tmplName)
+	}
+
 	buf := &bytes.Buffer{}
-	err := cp.tmpl.Lookup(tmplName).Execute(buf, data)
+	err := tmpl.Execute(buf, data)
 	if err != nil {
 		return "", err
 	}
