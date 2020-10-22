@@ -15,7 +15,6 @@ import (
 
 	"github.com/Masterminds/sprig"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -397,11 +396,10 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 		}
 	}()
 
-	_, err = m.GetCurrentVersion(ctx)
-	if err == nil {
-		return nil
-	}
-	if pgErr, ok := err.(*pgconn.PgError); !ok || pgErr.Code != pgerrcode.UndefinedTable {
+	var count int
+	schema, table := splitSchemaTable(m.versionTable)
+	err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_tables where schemaname=$1 and tablename=$2", schema, table).Scan(&count)
+	if err != nil || count > 0 {
 		return err
 	}
 
@@ -413,4 +411,15 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
     where 0=(select count(*) from %s);
   `, m.versionTable, m.versionTable, m.versionTable))
 	return err
+}
+
+func splitSchemaTable(versionTable string) (schema, table string) {
+	if i := strings.IndexByte(versionTable, '.'); i == -1 {
+		schema = "public"
+		table = versionTable
+	} else {
+		schema = versionTable[:i]
+		table = versionTable[i+1:]
+	}
+	return
 }
