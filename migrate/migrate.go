@@ -396,10 +396,7 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 		}
 	}()
 
-	var count int
-	schema, table := splitSchemaTable(m.versionTable)
-	err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_tables where schemaname=$1 and tablename=$2", schema, table).Scan(&count)
-	if err != nil || count > 0 {
+	if ok, err := m.versionTableExists(ctx); err != nil || ok {
 		return err
 	}
 
@@ -413,13 +410,13 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 	return err
 }
 
-func splitSchemaTable(versionTable string) (schema, table string) {
-	if i := strings.IndexByte(versionTable, '.'); i == -1 {
-		schema = "public"
-		table = versionTable
+func (m *Migrator) versionTableExists(ctx context.Context) (ok bool, err error) {
+	var count int
+	if i := strings.IndexByte(m.versionTable, '.'); i == -1 {
+		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_class where relname=$1 and relkind='r' and pg_table_is_visible(oid)", m.versionTable).Scan(&count)
 	} else {
-		schema = versionTable[:i]
-		table = versionTable[i+1:]
+		schema, table := m.versionTable[:i], m.versionTable[i+1:]
+		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_tables where schemaname=$1 and tablename=$2", schema, table).Scan(&count)
 	}
-	return
+	return count > 0, err
 }
