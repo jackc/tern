@@ -256,6 +256,34 @@ func TestMigrateToBoundaries(t *testing.T) {
 	require.EqualError(t, err, "current version 4 is greater than last version of 3")
 }
 
+func TestMigrateToDisableTxInTx(t *testing.T) {
+	conn := connectConn(t)
+	ctx := context.Background()
+	defer conn.Close(ctx)
+	tx, err := conn.Begin(ctx)
+	assert.NoError(t, err)
+
+	m, err := migrate.NewMigratorEx(ctx, conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	assert.NoError(t, err)
+	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
+	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
+	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
+
+	err = m.MigrateTo(ctx, 3)
+	assert.NoError(t, err)
+	require.EqualValues(t, 3, currentVersion(t, conn))
+	require.True(t, tableExists(t, conn, "t1"))
+	require.True(t, tableExists(t, conn, "t2"))
+	require.True(t, tableExists(t, conn, "t3"))
+
+	err = tx.Rollback(ctx)
+	assert.NoError(t, err)
+	require.False(t, tableExists(t, conn, versionTable))
+	require.False(t, tableExists(t, conn, "t1"))
+	require.False(t, tableExists(t, conn, "t2"))
+	require.False(t, tableExists(t, conn, "t3"))
+}
+
 func TestMigrateToDisableTx(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())

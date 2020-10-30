@@ -16,7 +16,6 @@ import (
 
 	"github.com/Masterminds/sprig"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -378,11 +377,7 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 		}
 	}()
 
-	_, err = m.GetCurrentVersion(ctx)
-	if err == nil {
-		return nil
-	}
-	if pgErr, ok := err.(*pgconn.PgError); !ok || pgErr.Code != pgerrcode.UndefinedTable {
+	if ok, err := m.versionTableExists(ctx); err != nil || ok {
 		return err
 	}
 
@@ -397,4 +392,15 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 		on conflict do nothing;
   `, m.versionTable))
 	return err
+}
+
+func (m *Migrator) versionTableExists(ctx context.Context) (ok bool, err error) {
+	var count int
+	if i := strings.IndexByte(m.versionTable, '.'); i == -1 {
+		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_class where relname=$1 and relkind='r' and pg_table_is_visible(oid)", m.versionTable).Scan(&count)
+	} else {
+		schema, table := m.versionTable[:i], m.versionTable[i+1:]
+		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_tables where schemaname=$1 and tablename=$2", schema, table).Scan(&count)
+	}
+	return count > 0, err
 }
