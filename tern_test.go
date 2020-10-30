@@ -244,7 +244,7 @@ version:  1 of 2`
 }
 
 func TestInstallCode(t *testing.T) {
-	tern(t, "install-code", "-c", "testdata/tern.conf", "testdata/code")
+	tern(t, "code", "install", "-c", "testdata/tern.conf", "testdata/code")
 
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
