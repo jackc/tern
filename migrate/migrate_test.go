@@ -265,9 +265,9 @@ func TestMigrateToDisableTxInTx(t *testing.T) {
 
 	m, err := migrate.NewMigratorEx(ctx, conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
 	assert.NoError(t, err)
-	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
-	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
-	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
+	m.AppendMigration("Create t1", "create table t1(id serial);")
+	m.AppendMigration("Create t2", "create table t2(id serial);")
+	m.AppendMigration("Create t3", "create table t3(id serial);")
 
 	err = m.MigrateTo(ctx, 3)
 	assert.NoError(t, err)
