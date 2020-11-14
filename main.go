@@ -17,7 +17,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/Masterminds/sprig"
+	"github.com/Masterminds/sprig/v3"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/tern/migrate"
 	"github.com/spf13/cobra"
