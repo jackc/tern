@@ -742,7 +742,8 @@ func appendConfigFromFile(config *Config, path string) error {
 		}
 	}
 
-	if config.ConnConfig.Port == 0 {
+	var defaultPort uint16 = 5432 // default port value from pgconn
+	if config.ConnConfig.Port == 0 || config.ConnConfig.Port == defaultPort {
 		if p, ok := file.Get("database", "port"); ok {
 			n, err := strconv.ParseUint(p, 10, 16)
 			if err != nil {
