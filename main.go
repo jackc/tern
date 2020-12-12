@@ -742,14 +742,12 @@ func appendConfigFromFile(config *Config, path string) error {
 		}
 	}
 
-	if config.ConnConfig.Port == 0 {
-		if p, ok := file.Get("database", "port"); ok {
-			n, err := strconv.ParseUint(p, 10, 16)
-			if err != nil {
-				return err
-			}
-			config.ConnConfig.Port = uint16(n)
+	if p, ok := file.Get("database", "port"); ok {
+		n, err := strconv.ParseUint(p, 10, 16)
+		if err != nil {
+			return err
 		}
+		config.ConnConfig.Port = uint16(n)
 	}
 
 	if database, ok := file.Get("database", "database"); ok {
