@@ -309,6 +309,11 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.12.2 (December 23, 2020)
+
+* Fix setting port from config file
+* Fix non-schema qualified version table not in public but in search path (Tynor Fujimoto)
+
 ## 1.12.1 (June 27, 2020)
 
 * Update to latest version of pgx.
