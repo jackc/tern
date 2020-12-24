@@ -309,6 +309,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.12.3 (December 24, 2020)
+
+* Fix reported version number
+
 ## 1.12.2 (December 23, 2020)
 
 * Fix setting port from config file
