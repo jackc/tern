@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"os"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type SSHConnConfig struct {
@@ -23,6 +25,12 @@ func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 
 	if config.Password != "" {
 		sshConfig.Auth = append(sshConfig.Auth, ssh.Password(config.Password))
+	}
+
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		if hostKeyCallback, err := knownhosts.New(fmt.Sprintf("%s/.ssh/known_hosts", homeDir)); err == nil {
+			sshConfig.HostKeyCallback = hostKeyCallback
+		}
 	}
 
 	return ssh.Dial("tcp", net.JoinHostPort(config.Host, config.Port), sshConfig)
