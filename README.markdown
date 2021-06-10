@@ -246,7 +246,7 @@ your PostgreSQL server is `pg.example.com`, but you only have SSH access, then
 your SSH host would be pg.example.com and your database host would be
 `localhost`.
 
-Tern will automatically use an SSH agent if available.
+Tern will automatically use an SSH agent or `~/.ssh/id_rsa` if available.
 
 ## Embedding Tern
 

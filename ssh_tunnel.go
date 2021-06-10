@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 
@@ -20,7 +21,10 @@ type SSHConnConfig struct {
 func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 	sshConfig := &ssh.ClientConfig{
 		User: config.User,
-		Auth: []ssh.AuthMethod{SSHAgent()},
+	}
+
+	if auth := SSHAgent(); auth != nil {
+		sshConfig.Auth = append(sshConfig.Auth, auth)
 	}
 
 	if config.Password != "" {
@@ -30,6 +34,9 @@ func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		if hostKeyCallback, err := knownhosts.New(fmt.Sprintf("%s/.ssh/known_hosts", homeDir)); err == nil {
 			sshConfig.HostKeyCallback = hostKeyCallback
+		}
+		if auth := PrivateKey(fmt.Sprintf("%s/.ssh/id_rsa", homeDir)); auth != nil {
+			sshConfig.Auth = append(sshConfig.Auth, auth)
 		}
 	}
 
@@ -41,4 +48,16 @@ func SSHAgent() ssh.AuthMethod {
 		return ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers)
 	}
 	return nil
+}
+
+func PrivateKey(path string) ssh.AuthMethod {
+	key, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	signer, err := ssh.ParsePrivateKey(key)
+	if err != nil {
+		return nil
+	}
+	return ssh.PublicKeys(signer)
 }
