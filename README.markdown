@@ -309,6 +309,14 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 1.12.5 (June 12, 2021)
+
+* Look for SSH keys in `~/.ssh/id_rsa` (Miles Delahunty)
+
+## 1.12.4 (February 27, 2021)
+
+* Use user's known_hosts file when connecting via SSH
+
 ## 1.12.3 (December 24, 2020)
 
 * Fix reported version number
