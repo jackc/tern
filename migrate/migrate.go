@@ -187,12 +187,11 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 		}
 
 		n, isMigration, err := ExtractMigrationNumber(fi.Name())
-		if !isMigration {
-			continue
-		}
-
 		if err != nil {
 			return nil, err
+		}
+		if !isMigration {
+			continue
 		}
 
 		if n < int64(len(paths)+1) {
