@@ -182,7 +182,7 @@ func main() {
 		Short: "Migrate the database",
 		Long: `Migrate the database to destination migration version.
 
-Destination migration version can be one of the following value types:©
+Destination migration version can be one of the following value types:
 
 An integer:
   Migrate to a specific migration.
@@ -401,7 +401,7 @@ func UpdateMigrationNumber(cmd *cobra.Command, args []string) {
 	}
 	newMigrationName := fmt.Sprintf("%03d%s", latestMigration+1, name[3:])
 
-	err= os.Rename(mPath, newMigrationName)
+	err = os.Rename(mPath, newMigrationName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
