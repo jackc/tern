@@ -147,12 +147,11 @@ func ReadMigrationStatsEx(path string, fs MigratorFS) (int64, []int64, []int64, 
 		}
 
 		n, isMigration, err := ExtractMigrationNumber(fi.Name())
-		if !isMigration {
-			continue
-		}
-
 		if err != nil {
 			return 0, nil, nil, err
+		}
+		if !isMigration {
+			continue
 		}
 
 		if n == latestFound {
