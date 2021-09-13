@@ -106,6 +106,73 @@ func (defaultMigratorFS) Glob(pattern string) ([]string, error) {
 	return filepath.Glob(pattern)
 }
 
+// ReadMigrationStats Does similar as FindMigrations but returns stats (highest found, missing, repeated)
+// about what it found instead of failing when a migration is missing or repeated.
+func ReadMigrationStats(path string) (int64, []int64, []int64, error) {
+	return ReadMigrationStatsEx(path, defaultMigratorFS{})
+}
+
+// ExtractMigrationNumber returns the number of the migration and a bool indicating there was a migration found
+// an error will be returned if the migration number is not a suitable integer.
+func ExtractMigrationNumber(fileName string) (int64, bool, error) {
+	matches := migrationPattern.FindStringSubmatch(fileName)
+	if len(matches) != 2 {
+		return 0, false, nil
+	}
+
+	n, err := strconv.ParseInt(matches[1], 10, 32)
+	if err != nil {
+		// The regexp already validated that the prefix is all digits so this *should* never fail
+		return 0, false, err
+	}
+	return n, true, nil
+}
+
+// ReadMigrationStatsEx Does similar as FindMigrationsEx but returns stats (highest found, repeated, missing)
+// about what it found instead of failing when a migration is missing or repeated.
+func ReadMigrationStatsEx(path string, fs MigratorFS) (int64, []int64, []int64, error) {
+	path = strings.TrimRight(path, string(filepath.Separator))
+
+	fileInfos, err := fs.ReadDir(path)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
+	var latestFound int64 = -1
+	var dupes []int64
+	var missing []int64
+	for _, fi := range fileInfos {
+		if fi.IsDir() {
+			continue
+		}
+
+		n, isMigration, err := ExtractMigrationNumber(fi.Name())
+		if !isMigration {
+			continue
+		}
+
+		if err != nil {
+			return 0, nil, nil, err
+		}
+
+		if n == latestFound {
+			dupes = append(dupes, n)
+		}
+
+		// might be a range of missing
+
+		if n-latestFound != 1 {
+			for i := latestFound + 1; i < n; i++ {
+				missing = append(missing, i)
+			}
+		}
+
+		latestFound = n
+	}
+
+	return latestFound, dupes, missing, nil
+}
+
 func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 	path = strings.TrimRight(path, string(filepath.Separator))
 
@@ -120,14 +187,12 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 			continue
 		}
 
-		matches := migrationPattern.FindStringSubmatch(fi.Name())
-		if len(matches) != 2 {
+		n, isMigration, err := ExtractMigrationNumber(fi.Name())
+		if !isMigration {
 			continue
 		}
 
-		n, err := strconv.ParseInt(matches[1], 10, 32)
 		if err != nil {
-			// The regexp already validated that the prefix is all digits so this *should* never fail
 			return nil, err
 		}
 

@@ -18,9 +18,10 @@ import (
 
 	"github.com/Masterminds/sprig"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/tern/migrate"
 	"github.com/spf13/cobra"
-	ini "github.com/vaughan0/go-ini"
+	"github.com/vaughan0/go-ini"
+
+	"github.com/jackc/tern/migrate"
 )
 
 const VERSION = "1.12.5"
@@ -181,7 +182,7 @@ func main() {
 		Short: "Migrate the database",
 		Long: `Migrate the database to destination migration version.
 
-Destination migration version can be one of the following value types:
+Destination migration version can be one of the following value types:©
 
 An integer:
   Migrate to a specific migration.
@@ -254,6 +255,13 @@ The word "last":
 	}
 	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
 
+	cmdReNumber := &cobra.Command{
+		Use:   "update NAME",
+		Short: "Change this migration number to the latest",
+		Long:  "Update the provided migration with the next sequence number",
+		Run:   UpdateMigrationNumber,
+	}
+
 	cmdVersion := &cobra.Command{
 		Use:   "version",
 		Short: "Print version",
@@ -272,6 +280,7 @@ The word "last":
 	rootCmd.AddCommand(cmdCode)
 	rootCmd.AddCommand(cmdStatus)
 	rootCmd.AddCommand(cmdNew)
+	rootCmd.AddCommand(cmdReNumber)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
 }
@@ -341,6 +350,58 @@ func Init(cmd *cobra.Command, args []string) {
 	defer smFile.Close()
 
 	_, err = smFile.WriteString(sampleMigration)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func UpdateMigrationNumber(cmd *cobra.Command, args []string) {
+	if len(args) != 1 {
+		cmd.Help()
+		os.Exit(1)
+	}
+
+	name := args[0]
+
+	migrationsPath := cliOptions.migrationsPath
+
+	mPath := filepath.Join(migrationsPath, name)
+	if _, err := os.Stat(mPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error accessing migration to rename:\n :%v\n", err)
+		os.Exit(1)
+	}
+
+	latestMigration, dupes, _, err := migrate.ReadMigrationStats(migrationsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing migrations:\n  %v\n", err)
+		os.Exit(1)
+	}
+	oldMNumber, isMigration, err := migrate.ExtractMigrationNumber(mPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing the passed migration name:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	if !isMigration {
+		fmt.Fprint(os.Stderr, "The passed file is not a valid migration:\n")
+		os.Exit(1)
+	}
+
+	// if this is not a duplicated migration it is likely that renaming it would break migrations.
+	var found bool
+	for _, d := range dupes {
+		if found = d == oldMNumber; found {
+			break
+		}
+	}
+	if !found {
+		fmt.Fprintf(os.Stderr, "This would cause %d migration to be missing:\n", oldMNumber)
+		os.Exit(1)
+	}
+	newMigrationName := fmt.Sprintf("%03d%s", latestMigration+1, name[3:])
+
+	err= os.Rename(mPath, newMigrationName)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
