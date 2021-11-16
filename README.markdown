@@ -257,7 +257,7 @@ could be determined by environment variable as part of a blue / green deployment
 
 ## Template Tips
 
-The `env` function can be used to read provess environment variables.
+The `env` function can be used to read process environment variables.
 
 ```
 drop schema if exists {{ env "CODE_SCHEMA" }} cascade;
