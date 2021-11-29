@@ -12,7 +12,13 @@ workflow for managing database code such as functions and views.
 
 ## Installation
 
+Go versions up to and including 1.17:
+
     go get -u github.com/jackc/tern
+    
+Go versions 1.17 and higher:
+
+    go install github.com/jackc/tern@latest
 
 ## Creating a Tern Project
 
