@@ -32,8 +32,12 @@ func readConfig(path string) (*pgx.ConnConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	var connString string
+	if cs, ok := file.Get("database", "conn_string"); ok {
+		connString = cs
+	}
+	cp, _ := pgx.ParseConfig(connString)
 
-	cp, _ := pgx.ParseConfig("")
 	if s, ok := file.Get("database", "host"); ok {
 		cp.Host = s
 	}
@@ -51,7 +55,7 @@ func readConfig(path string) (*pgx.ConnConfig, error) {
 	if s, ok := file.Get("database", "user"); ok {
 		cp.User = s
 	}
-	if s, ok := file.Get("database", "Password"); ok {
+	if s, ok := file.Get("database", "password"); ok {
 		cp.Password = s
 	}
 
@@ -381,6 +385,34 @@ func TestSSHTunnel(t *testing.T) {
 		"--password", password,
 		"--database", database,
 	)
+	expected := `status:   migration(s) pending
+version:  0 of 2`
+	if !strings.Contains(output, expected) {
+		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
+	}
+}
+
+func TestConnStringCLIArg(t *testing.T) {
+	// Ensure database is in clean state
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	connString := os.Getenv("MIGRATE_TEST_CONN_STRING")
+
+	output := tern(t, "status",
+		"-m", "testdata",
+		"--conn-string", connString,
+	)
+	expected := `status:   migration(s) pending
+version:  0 of 2`
+	if !strings.Contains(output, expected) {
+		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
+	}
+}
+
+func TestConnStringFromConfFile(t *testing.T) {
+	// Ensure database is in clean state
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+
+	output := tern(t, "status", "-m", "testdata", "-c", "testdata/tern-conn-string.conf")
 	expected := `status:   migration(s) pending
 version:  0 of 2`
 	if !strings.Contains(output, expected) {

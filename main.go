@@ -96,6 +96,7 @@ var cliOptions struct {
 	migrationsPath     string
 	configPath         string
 
+	connString   string
 	host         string
 	port         uint16
 	user         string
@@ -279,6 +280,7 @@ The word "last":
 func addCoreConfigFlagsToCommand(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
 
+	cmd.Flags().StringVarP(&cliOptions.connString, "conn-string", "", "", "database connection string (https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING)")
 	cmd.Flags().StringVarP(&cliOptions.host, "host", "", "", "database host")
 	cmd.Flags().Uint16VarP(&cliOptions.port, "port", "", 0, "database port")
 	cmd.Flags().StringVarP(&cliOptions.user, "user", "", "", "database user")
@@ -683,7 +685,10 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	appendConfigFromCLIArgs(config)
+	err := appendConfigFromCLIArgs(config)
+	if err != nil {
+		return nil, err
+	}
 
 	if config.SSHConnConfig.User == "" {
 		user, err := user.Current()
@@ -729,6 +734,14 @@ func appendConfigFromFile(config *Config, path string) error {
 	file, err := ini.Load(&buf)
 	if err != nil {
 		return err
+	}
+
+	if connString, ok := file.Get("database", "conn_string"); ok {
+		if connConfig, err := pgx.ParseConfig(connString); err == nil {
+			config.ConnConfig = *connConfig
+		} else {
+			return fmt.Errorf("error while parsing conn_string property: %w", err)
+		}
 	}
 
 	if host, ok := file.Get("database", "host"); ok {
@@ -797,7 +810,16 @@ func appendConfigFromFile(config *Config, path string) error {
 	return nil
 }
 
-func appendConfigFromCLIArgs(config *Config) {
+func appendConfigFromCLIArgs(config *Config) error {
+	if cliOptions.connString != "" {
+		fmt.Println("receive non nil connstring ", cliOptions.connString)
+		if connConfig, err := pgx.ParseConfig(cliOptions.connString); err == nil {
+			config.ConnConfig = *connConfig
+		} else {
+			return fmt.Errorf("error while parsing conn-string argument: %w", err)
+		}
+	}
+
 	if cliOptions.host != "" {
 		config.ConnConfig.Host = cliOptions.host
 	}
@@ -835,4 +857,6 @@ func appendConfigFromCLIArgs(config *Config) {
 	if cliOptions.sshPassword != "" {
 		config.SSHConnConfig.Password = cliOptions.sshPassword
 	}
+
+	return nil
 }
