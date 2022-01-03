@@ -812,7 +812,6 @@ func appendConfigFromFile(config *Config, path string) error {
 
 func appendConfigFromCLIArgs(config *Config) error {
 	if cliOptions.connString != "" {
-		fmt.Println("receive non nil connstring ", cliOptions.connString)
 		if connConfig, err := pgx.ParseConfig(cliOptions.connString); err == nil {
 			config.ConnConfig = *connConfig
 		} else {

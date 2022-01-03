@@ -77,6 +77,19 @@ password = {{env "MIGRATOR_PASSWORD"}}
 # prefer - on trusted networks where security is not required
 # verify-full - require SSL connection
 # sslmode = prefer
+#
+# "conn_string" accepts two formats; URI or DSN as described in:
+# https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING
+#
+# This property is lenient i.e., it does not throw error
+# if values for both "conn_string" and "host/port/.." are
+# provided. In this case, the individual properties will
+# override the correspoding part in the "conn_string".
+#
+# URI format:
+# conn_string = postgresql://other@localhost/otherdb?connect_timeout=10&application_name=myapp
+# DSN format:
+# conn_string = host=localhost port=5432 dbname=mydb connect_timeout=10
 
 # Proxy the above database connection via SSH
 # [ssh-tunnel]
