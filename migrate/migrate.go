@@ -45,7 +45,8 @@ func (e NoMigrationsFoundError) Error() string {
 }
 
 type MigrationPgError struct {
-	Sql string
+	Filename string
+	Sql      string
 	*pgconn.PgError
 }
 
@@ -352,7 +353,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		_, err = m.conn.Exec(ctx, sql)
 		if err != nil {
 			if err, ok := err.(*pgconn.PgError); ok {
-				return MigrationPgError{Sql: sql, PgError: err}
+				return MigrationPgError{Filename: current.Name, Sql: sql, PgError: err}
 			}
 			return err
 		}
