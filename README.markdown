@@ -15,7 +15,7 @@ workflow for managing database code such as functions and views.
 Go versions up to and including 1.17:
 
     go get -u github.com/jackc/tern
-    
+
 Go versions 1.17 and higher:
 
     go install github.com/jackc/tern@latest
@@ -327,6 +327,11 @@ Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
+
+## 1.13.0 (April 21, 2022)
+
+* Add conn string connection config option (vivek-shrikhande)
+* Add Filename to MigrationPgError (davidmdm)
 
 ## 1.12.5 (June 12, 2021)
 
