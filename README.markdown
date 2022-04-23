@@ -208,6 +208,54 @@ To use a different migrations directory:
 
     tern migrate --migrations path/to/migrations
 
+## Renumbering Conflicting Migrations
+
+When migrations are created on multiple branches the migrations need to be renumbered when the branches are merged. The
+`tern renumber` command can automatically do this. On the branch with the only migrations to keep at the lower numbers
+run `tern renumber start`. Merge the branches. Then run `tern renumber finish`.
+
+```
+$ git switch master
+Switched to branch 'master'
+$ ls
+001_create_users.sql
+002_add_last_login_to_users.sql
+
+$ git switch feature
+Switched to branch 'feature'
+$ ls
+001_create_users.sql
+002_create_todos.sql
+
+# Both branches have a migration number 2.
+
+# Run tern renumber start on the branch with the migrations that should come first.
+
+$ git switch master
+Switched to branch 'master'
+$ tern renumber start
+
+# Then go to the branch with migrations that should come later and merge or rebase.
+
+$ git switch feature
+$ git rebase master
+Successfully rebased and updated refs/heads/feature.
+$ ls
+001_create_users.sql
+002_add_last_login_to_users.sql
+002_create_todos.sql
+
+# There are now two migrations with the same migration number.
+
+$ tern renumber finish
+$ ls
+001_create_users.sql
+002_add_last_login_to_users.sql
+003_create_todos.sql
+
+# The migrations are now renumbered in the correct order.
+```
+
 ## Code Packages
 
 The migration paradigm works well for creating and altering tables, but it can be unwieldy when dealing with database

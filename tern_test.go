@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -417,5 +418,38 @@ func TestConnStringFromConfFile(t *testing.T) {
 version:  0 of 2`
 	if !strings.Contains(output, expected) {
 		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
+	}
+}
+
+func TestRenumber(t *testing.T) {
+	path := "tmp/renumber"
+	defer func() {
+		os.RemoveAll(path)
+	}()
+
+	tern(t, "init", path)
+
+	baseFiles := []string{"001_a.sql", "002_b.sql", "003_c.sql"}
+	for _, filename := range baseFiles {
+		f, err := os.Create(filepath.Join(path, filename))
+		require.NoError(t, err)
+		f.Close()
+	}
+
+	tern(t, "renumber", "start", "-m", path)
+
+	conflictingFiles := []string{"002_d.sql", "003_e.sql", "004_f.sql"}
+	for _, filename := range conflictingFiles {
+		f, err := os.Create(filepath.Join(path, filename))
+		require.NoError(t, err)
+		f.Close()
+	}
+
+	tern(t, "renumber", "finish", "-m", path)
+
+	expectedFiles := []string{"001_a.sql", "002_b.sql", "003_c.sql", "004_d.sql", "005_e.sql", "006_f.sql"}
+	for _, filename := range expectedFiles {
+		_, err := os.Stat(filepath.Join(path, filename))
+		require.NoError(t, err)
 	}
 }

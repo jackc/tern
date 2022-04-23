@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -11,6 +12,8 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"text/template"
@@ -255,6 +258,28 @@ The word "last":
 	}
 	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
 
+	cmdRenumber := &cobra.Command{
+		Use:   "renumber COMMAND",
+		Short: "Execute a renumber command",
+	}
+
+	cmdRenumberStart := &cobra.Command{
+		Use:   "start",
+		Short: "Start renumbering",
+		Long:  "Start renumbering with the current migration numbering preserved",
+		Run:   RenumberStart,
+	}
+	cmdRenumberStart.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+
+	cmdRenumberFinish := &cobra.Command{
+		Use:   "finish",
+		Short: "Finish renumbering",
+		Long:  "Finish renumbering with new migrations renumbered",
+
+		Run: RenumberFinish,
+	}
+	cmdRenumberFinish.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+
 	cmdVersion := &cobra.Command{
 		Use:   "version",
 		Short: "Print version",
@@ -267,9 +292,13 @@ The word "last":
 	cmdCode.AddCommand(cmdCodeCompile)
 	cmdCode.AddCommand(cmdCodeSnapshot)
 
+	cmdRenumber.AddCommand(cmdRenumberStart)
+	cmdRenumber.AddCommand(cmdRenumberFinish)
+
 	rootCmd := &cobra.Command{Use: "tern", Short: "tern - PostgreSQL database migrator"}
 	rootCmd.AddCommand(cmdInit)
 	rootCmd.AddCommand(cmdMigrate)
+	rootCmd.AddCommand(cmdRenumber)
 	rootCmd.AddCommand(cmdCode)
 	rootCmd.AddCommand(cmdStatus)
 	rootCmd.AddCommand(cmdNew)
@@ -663,6 +692,156 @@ func Status(cmd *cobra.Command, args []string) {
 	fmt.Printf("version:  %d of %d\n", migrationVersion, len(migrator.Migrations))
 	fmt.Println("host:    ", config.ConnConfig.Host)
 	fmt.Println("database:", config.ConnConfig.Database)
+}
+
+func RenumberStart(cmd *cobra.Command, args []string) {
+	migrationsPath := cliOptions.migrationsPath
+	migrations, err := migrate.FindMigrations(migrationsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	renumberFilepath := filepath.Join(migrationsPath, ".tern-renumber.tmp")
+	renumberFile, err := os.Create(renumberFilepath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating renumber file:\n  %v\n", err)
+		os.Exit(1)
+	}
+	defer renumberFile.Close()
+
+	w := bufio.NewWriter(renumberFile)
+	for _, s := range migrations {
+		s = strings.TrimPrefix(s, migrationsPath)
+		s = strings.TrimPrefix(s, string(filepath.Separator))
+		_, err := fmt.Fprintln(w, s)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing renumber file:\n  %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	err = w.Flush()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing renumber file:\n  %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func RenumberFinish(cmd *cobra.Command, args []string) {
+	migrationsPath := cliOptions.migrationsPath
+
+	currentMigrations, err := findMigrationsForRenumber(migrationsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	for i, s := range currentMigrations {
+		s = strings.TrimPrefix(s, migrationsPath)
+		s = strings.TrimPrefix(s, string(filepath.Separator))
+		currentMigrations[i] = s
+	}
+
+	renumberFilepath := filepath.Join(migrationsPath, ".tern-renumber.tmp")
+	renumberFile, err := os.Open(renumberFilepath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening renumber file:\n  %v\n", err)
+		os.Exit(1)
+	}
+	defer renumberFile.Close()
+
+	var originalMigrations []string
+	scanner := bufio.NewScanner(renumberFile)
+	for scanner.Scan() {
+		originalMigrations = append(originalMigrations, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading renumber file:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	numberPrefixRegexp := regexp.MustCompile(`^\d+`)
+	var lastMigrationNumber int64
+	for _, s := range originalMigrations {
+		numStr := numberPrefixRegexp.FindString(s)
+		num, err := strconv.ParseInt(numStr, 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing renumber file:\n  %v\n", err)
+			os.Exit(1)
+		}
+
+		if num > lastMigrationNumber {
+			lastMigrationNumber = num
+		}
+	}
+
+	makeMapFromStrings := func(slice []string) map[string]struct{} {
+		m := make(map[string]struct{})
+		for _, s := range slice {
+			m[s] = struct{}{}
+		}
+		return m
+	}
+	originalMigrationsMap := makeMapFromStrings(originalMigrations)
+
+	var migrationsToRenumber []string
+	for _, s := range currentMigrations {
+		if _, present := originalMigrationsMap[s]; !present {
+			migrationsToRenumber = append(migrationsToRenumber, s)
+		}
+	}
+
+	sort.Slice(migrationsToRenumber, func(i, j int) bool {
+		iStr := numberPrefixRegexp.FindString(migrationsToRenumber[i])
+		iNum, _ := strconv.ParseInt(iStr, 10, 64)
+		jStr := numberPrefixRegexp.FindString(migrationsToRenumber[j])
+		jNum, _ := strconv.ParseInt(jStr, 10, 64)
+		return iNum < jNum
+	})
+
+	for _, s := range migrationsToRenumber {
+		numPrefix := numberPrefixRegexp.FindString(s)
+		lastMigrationNumber++
+		newMigrationName := fmt.Sprintf("%03d%s", lastMigrationNumber, s[len(numPrefix):])
+		err := os.Rename(filepath.Join(migrationsPath, s), filepath.Join(migrationsPath, newMigrationName))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error renaming migration file:\n  %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	os.Remove(renumberFilepath)
+}
+
+// findMigrationsForRenumber finds migration files. Can't use migrate.FindMigrations because it fails when there are
+// duplicate numbers.
+func findMigrationsForRenumber(path string) ([]string, error) {
+	migrationPattern := regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
+
+	path = strings.TrimRight(path, string(filepath.Separator))
+
+	fileInfos, err := ioutil.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+
+	paths := make([]string, 0, len(fileInfos))
+	for _, fi := range fileInfos {
+		if fi.IsDir() {
+			continue
+		}
+
+		matches := migrationPattern.FindStringSubmatch(fi.Name())
+		if len(matches) != 2 {
+			continue
+		}
+
+		paths = append(paths, filepath.Join(path, fi.Name()))
+	}
+
+	return paths, nil
 }
 
 func LoadConfig() (*Config, error) {
