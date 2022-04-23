@@ -144,7 +144,7 @@ func (c *Config) Connect(ctx context.Context) (*pgx.Conn, error) {
 	}
 
 	// If sslmode was set in config file or cli argument, set it in the
-	// environment so we can use pgx.ParseEnvLibpq to use pgx's built-in
+	// environment so we can use pgx.ParseConfig to use pgx's built-in
 	// functionality.
 	switch c.SslMode {
 	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
