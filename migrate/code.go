@@ -93,7 +93,7 @@ func LoadCodePackageEx(path string, fs MigratorFS) (*CodePackage, error) {
 }
 
 func LoadCodePackage(path string) (*CodePackage, error) {
-	return LoadCodePackageEx(path, defaultMigratorFS{})
+	return LoadCodePackageEx(path, DefaultMigratorFS{})
 }
 
 func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[string]interface{}, codePackage *CodePackage) (err error) {
