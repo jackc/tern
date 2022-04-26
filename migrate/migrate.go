@@ -86,7 +86,7 @@ type Migrator struct {
 
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
 func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{MigratorFS: defaultMigratorFS{}})
+	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{MigratorFS: DefaultMigratorFS{}})
 }
 
 // NewMigratorEx initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
@@ -104,17 +104,17 @@ type MigratorFS interface {
 	Glob(pattern string) (matches []string, err error)
 }
 
-type defaultMigratorFS struct{}
+type DefaultMigratorFS struct{}
 
-func (defaultMigratorFS) ReadDir(dirname string) ([]os.FileInfo, error) {
+func (DefaultMigratorFS) ReadDir(dirname string) ([]os.FileInfo, error) {
 	return ioutil.ReadDir(dirname)
 }
 
-func (defaultMigratorFS) ReadFile(filename string) ([]byte, error) {
+func (DefaultMigratorFS) ReadFile(filename string) ([]byte, error) {
 	return ioutil.ReadFile(filename)
 }
 
-func (defaultMigratorFS) Glob(pattern string) ([]string, error) {
+func (DefaultMigratorFS) Glob(pattern string) ([]string, error) {
 	return filepath.Glob(pattern)
 }
 
@@ -158,7 +158,7 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 }
 
 func FindMigrations(path string) ([]string, error) {
-	return FindMigrationsEx(path, defaultMigratorFS{})
+	return FindMigrationsEx(path, DefaultMigratorFS{})
 }
 
 func (m *Migrator) LoadMigrations(path string) error {
