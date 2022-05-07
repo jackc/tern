@@ -387,7 +387,7 @@ func NewMigration(cmd *cobra.Command, args []string) {
 	name := args[0]
 
 	migrationsPath := cliOptions.migrationsPath
-	migrations, err := migrate.FindMigrations(migrationsPath)
+	migrations, err := migrate.FindMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -447,7 +447,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 	migrator.Data = config.Data
 
 	migrationsPath := cliOptions.migrationsPath
-	err = migrator.LoadMigrations(migrationsPath)
+	err = migrator.LoadMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -534,7 +534,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 func InstallCode(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	codePackage, err := migrate.LoadCodePackage(path)
+	codePackage, err := migrate.LoadCodePackage(os.DirFS(path))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
 		os.Exit(1)
@@ -581,7 +581,7 @@ func InstallCode(cmd *cobra.Command, args []string) {
 func CompileCode(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	codePackage, err := migrate.LoadCodePackage(path)
+	codePackage, err := migrate.LoadCodePackage(os.DirFS(path))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
 		os.Exit(1)
@@ -611,14 +611,14 @@ func CompileCode(cmd *cobra.Command, args []string) {
 func SnapshotCode(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	_, err := migrate.LoadCodePackage(path)
+	_, err := migrate.LoadCodePackage(os.DirFS(path))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
 		os.Exit(1)
 	}
 
 	migrationsPath := cliOptions.migrationsPath
-	migrations, err := migrate.FindMigrations(migrationsPath)
+	migrations, err := migrate.FindMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -664,7 +664,7 @@ func Status(cmd *cobra.Command, args []string) {
 	migrator.Data = config.Data
 
 	migrationsPath := cliOptions.migrationsPath
-	err = migrator.LoadMigrations(migrationsPath)
+	err = migrator.LoadMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -696,7 +696,7 @@ func Status(cmd *cobra.Command, args []string) {
 
 func RenumberStart(cmd *cobra.Command, args []string) {
 	migrationsPath := cliOptions.migrationsPath
-	migrations, err := migrate.FindMigrations(migrationsPath)
+	migrations, err := migrate.FindMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)

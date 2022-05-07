@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
-	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig"
@@ -28,10 +28,8 @@ func (cp *CodePackage) Eval(data map[string]interface{}) (string, error) {
 	return buf.String(), nil
 }
 
-func findCodeFiles(dirname string, fs MigratorFS) ([]string, error) {
-	dirname = strings.TrimRight(dirname, string(filepath.Separator))
-
-	entries, err := fs.ReadDir(dirname)
+func findCodeFiles(fsys fs.FS) ([]string, error) {
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return nil, err
 	}
@@ -39,20 +37,26 @@ func findCodeFiles(dirname string, fs MigratorFS) ([]string, error) {
 	var results []string
 
 	for _, e := range entries {
-		ePath := filepath.Join(dirname, e.Name())
 		if e.IsDir() {
-			paths, err := findCodeFiles(ePath, fs)
+			subfs, err := fs.Sub(fsys, e.Name())
 			if err != nil {
 				return nil, err
 			}
-			results = append(results, paths...)
+			paths, err := findCodeFiles(subfs)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, p := range paths {
+				results = append(results, filepath.Join(e.Name(), p))
+			}
 		} else {
 			match, err := filepath.Match("*.sql", e.Name())
 			if err != nil {
 				return nil, fmt.Errorf("impossible filepath.Match error %w", err)
 			}
 			if match {
-				results = append(results, ePath)
+				results = append(results, e.Name())
 			}
 		}
 	}
@@ -60,23 +64,20 @@ func findCodeFiles(dirname string, fs MigratorFS) ([]string, error) {
 	return results, nil
 }
 
-func LoadCodePackageEx(path string, fs MigratorFS) (*CodePackage, error) {
-	path = strings.TrimRight(path, string(filepath.Separator))
-
+func LoadCodePackage(fsys fs.FS) (*CodePackage, error) {
 	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
-	sqlPaths, err := findCodeFiles(path, fs)
+	sqlPaths, err := findCodeFiles(fsys)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, p := range sqlPaths {
-		body, err := fs.ReadFile(p)
+		body, err := fs.ReadFile(fsys, p)
 		if err != nil {
 			return nil, err
 		}
 
-		name := strings.Replace(p, path+string(filepath.Separator), "", 1)
-		_, err = mainTmpl.New(name).Parse(string(body))
+		_, err = mainTmpl.New(p).Parse(string(body))
 		if err != nil {
 			return nil, err
 		}
@@ -90,10 +91,6 @@ func LoadCodePackageEx(path string, fs MigratorFS) (*CodePackage, error) {
 	codePackage := &CodePackage{tmpl: mainTmpl}
 
 	return codePackage, nil
-}
-
-func LoadCodePackage(path string) (*CodePackage, error) {
-	return LoadCodePackageEx(path, defaultMigratorFS{})
 }
 
 func InstallCodePackage(ctx context.Context, conn *pgx.Conn, mergeData map[string]interface{}, codePackage *CodePackage) (err error) {

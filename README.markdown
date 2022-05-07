@@ -380,7 +380,8 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Unreleased 2
 
-* Remove deprecated env access syntax in config file.
+* Remove deprecated env access syntax in config file
+* Replace MigratorFS interface with fs.FS
 
 ## 1.13.0 (April 21, 2022)
 
