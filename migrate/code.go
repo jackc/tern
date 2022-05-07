@@ -10,8 +10,8 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type CodePackage struct {
