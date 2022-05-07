@@ -380,6 +380,8 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Unreleased 2
 
+* Remove deprecated env access syntax in config file.
+
 ## 1.13.0 (April 21, 2022)
 
 * Add conn string connection config option (vivek-shrikhande)
