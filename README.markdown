@@ -382,6 +382,8 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 * Remove deprecated env access syntax in config file
 * Replace MigratorFS interface with fs.FS
+* Upgrade to pgx v5
+* Upgrade to sprig v3
 
 ## 1.13.0 (April 21, 2022)
 
