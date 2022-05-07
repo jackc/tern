@@ -1,5 +1,7 @@
 # Tern - The SQL Fan's Migrator
 
+This is the documentation for the unreleased development version v2.
+
 Tern is a standalone migration tool for PostgreSQL. It includes traditional migrations as well as a separate optional
 workflow for managing database code such as functions and views.
 
@@ -375,6 +377,8 @@ Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
+
+## Unreleased 2
 
 ## 1.13.0 (April 21, 2022)
 
