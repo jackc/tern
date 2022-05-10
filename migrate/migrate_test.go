@@ -378,6 +378,25 @@ func TestMigrateToDisableTx(t *testing.T) {
 	require.False(t, tableExists(t, conn, "t3"))
 }
 
+func TestMigrateToDisableTxInMigration(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	assert.NoError(t, err)
+	m.AppendMigration(
+		"Create t1",
+		`---- disable-tx ----
+create table t1(id serial);
+syntax error;`,
+		``)
+
+	err = m.MigrateTo(context.Background(), 1)
+	assert.Error(t, err)
+	require.EqualValues(t, 0, currentVersion(t, conn))
+	require.True(t, tableExists(t, conn, "t1"))
+}
+
 // // https://github.com/jackc/tern/issues/18
 func TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(t *testing.T) {
 	conn := connectConn(t)

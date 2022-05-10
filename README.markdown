@@ -175,6 +175,12 @@ and other advanced templating features are available if needed. See the
 package docs for details. [Sprig](http://masterminds.github.io/sprig/)
 functions are also available.
 
+Migrations are wrapped in a transaction by default. Some SQL statements such as `create index concurrently` cannot be performed within a transaction. To disable the transaction include the magic comment:
+
+```
+---- tern: disable-tx ----
+```
+
 ## Migrating
 
 To migrate up to the last version using migrations and config file located in

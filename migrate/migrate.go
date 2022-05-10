@@ -16,9 +16,11 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/tern/migrate/internal/sqlsplit"
 )
 
 var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
+var disableTxPattern = regexp.MustCompile(`(?m)^---- tern: disable-tx ----$`)
 
 var ErrNoFwMigration = errors.New("no sql in forward migration step")
 
@@ -321,8 +323,22 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 			}
 		}
 
+		useTx := !m.options.DisableTx
+		var sqlStatements []string
+		if disableTxPattern.MatchString(sql) {
+			useTx = false
+			sql = disableTxPattern.ReplaceAllLiteralString(sql, "")
+		} else {
+		}
+
+		if useTx {
+			sqlStatements = []string{sql}
+		} else {
+			sqlStatements = sqlsplit.Split(sql)
+		}
+
 		var tx pgx.Tx
-		if !m.options.DisableTx {
+		if useTx {
 			tx, err = m.conn.Begin(ctx)
 			if err != nil {
 				return err
@@ -336,12 +352,14 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		}
 
 		// Execute the migration
-		_, err = m.conn.Exec(ctx, sql)
-		if err != nil {
-			if err, ok := err.(*pgconn.PgError); ok {
-				return MigrationPgError{MigrationName: current.Name, Sql: sql, PgError: err}
+		for _, statement := range sqlStatements {
+			_, err = m.conn.Exec(ctx, statement)
+			if err != nil {
+				if err, ok := err.(*pgconn.PgError); ok {
+					return MigrationPgError{MigrationName: current.Name, Sql: statement, PgError: err}
+				}
+				return err
 			}
-			return err
 		}
 
 		// Reset all database connection settings. Important to do before updating version as search_path may have been changed.
@@ -353,7 +371,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 			return err
 		}
 
-		if !m.options.DisableTx {
+		if useTx {
 			err = tx.Commit(ctx)
 			if err != nil {
 				return err
