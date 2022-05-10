@@ -382,11 +382,11 @@ func TestMigrateToDisableTxInMigration(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
 
-	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
 	assert.NoError(t, err)
 	m.AppendMigration(
 		"Create t1",
-		`---- disable-tx ----
+		`---- tern: disable-tx ----
 create table t1(id serial);
 syntax error;`,
 		``)
