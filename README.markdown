@@ -355,6 +355,48 @@ All the actual functionality of tern is in the github.com/jackc/tern/migrate
 library. If you need to embed migrations into your own application this
 library can help.
 
+Example with embedded file system:
+
+```go
+//go:embed migrations/
+var embeddedMigrations embed.FS
+
+// ...
+stdConn, err := DB.Conn(ctx)
+if err != nil {
+    return fmt.Errorf("error acquiring connection from pool: %v", err)
+}
+defer stdConn.Close()
+err = stdConn.Raw(func(pgxConn interface{}) error {
+    conn := pgxConn.(*stdlib.Conn).Conn()
+    opts := migrate.MigratorOptions{
+        MigratorFS: NewEmbeddedFS(&embeddedMigrations),
+    }
+    migrator, err := migrate.NewMigratorEx(ctx, conn, "public.schema_version", &opts)
+    if err != nil {
+        return fmt.Errorf("error initializing migrator: %v", err)
+    }
+    err = migrator.LoadMigrations("migrations/")
+    if err != nil {
+        return fmt.Errorf("error loading migrations: %v", err)
+    }
+    if len(migrator.Migrations) == 0 {
+        return fmt.Errorf("no migrations found")
+    }
+
+    err = migrator.Migrate(ctx)
+    if err != nil {
+        return fmt.Errorf("unable to perform migration: %v", err)
+    }
+    return nil
+})
+if err != nil {
+    return fmt.Errorf("error migrating: %v", err)
+}
+// ...
+
+```
+
 ## Running the Tests
 
 To run the tests tern requires two test databases to run migrations against.
