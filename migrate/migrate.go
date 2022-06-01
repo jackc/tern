@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -116,6 +117,38 @@ func (DefaultMigratorFS) ReadFile(filename string) ([]byte, error) {
 
 func (DefaultMigratorFS) Glob(pattern string) ([]string, error) {
 	return filepath.Glob(pattern)
+}
+
+type EmbeddedFS struct {
+	efs *embed.FS
+}
+
+func NewEmbeddedFS(fs *embed.FS) *EmbeddedFS {
+	return &EmbeddedFS{efs: fs}
+}
+
+func (efs *EmbeddedFS) ReadDir(dirname string) ([]fs.FileInfo, error) {
+	dirEntries, err := efs.efs.ReadDir(dirname)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]fs.FileInfo, 0, len(dirEntries))
+	for _, de := range dirEntries {
+		fi, err := de.Info()
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, fi)
+	}
+	return result, nil
+}
+
+func (efs *EmbeddedFS) ReadFile(filename string) ([]byte, error) {
+	return efs.efs.ReadFile(filename)
+}
+
+func (efs *EmbeddedFS) Glob(pattern string) (matches []string, err error) {
+	return fs.Glob(efs.efs, pattern)
 }
 
 func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {

@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"os"
 	"testing"
@@ -57,6 +58,15 @@ func tableExists(t testing.TB, conn *pgx.Conn, tableName string) bool {
 func createEmptyMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 	var err error
 	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	assert.NoError(t, err)
+	return m
+}
+
+func createEmbeddedMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
+	var err error
+	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{
+		MigratorFS: migrate.NewEmbeddedFS(&embedded),
+	})
 	assert.NoError(t, err)
 	return m
 }
@@ -174,6 +184,26 @@ func TestLoadMigrations(t *testing.T) {
 	assert.Equal(t, "006_sprig.sql", m.Migrations[5].Name)
 	assert.Equal(t, "create table baz_42(id serial primary key);", m.Migrations[5].UpSQL)
 	assert.Equal(t, "drop table baz_42;", m.Migrations[5].DownSQL)
+}
+
+//go:embed testdata
+var embedded embed.FS
+
+func TestLoadMigrationsEmbedded(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createEmbeddedMigrator(t, conn)
+
+	m.Data = map[string]interface{}{"prefix": "foo"}
+	err := m.LoadMigrations("testdata/sample")
+	require.NoError(t, err)
+	require.Len(t, m.Migrations, 6)
+
+	assert.Equal(t, "001_create_t1.sql", m.Migrations[0].Name)
+	assert.Equal(t, `create table t1(
+  id serial primary key
+);`, m.Migrations[0].UpSQL)
+	assert.Equal(t, "drop table t1;", m.Migrations[0].DownSQL)
 }
 
 func TestLoadMigrationsNoForward(t *testing.T) {

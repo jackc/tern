@@ -1,6 +1,6 @@
 module github.com/jackc/tern
 
-go 1.13
+go 1.16
 
 require (
 	github.com/Masterminds/goutils v1.1.0 // indirect
