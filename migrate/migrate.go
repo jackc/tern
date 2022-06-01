@@ -370,7 +370,10 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		}
 
 		// Reset all database connection settings. Important to do before updating version as search_path may have been changed.
-		m.conn.Exec(ctx, "reset all")
+		_, err := m.conn.Exec(ctx, "reset all")
+		if err != nil {
+			return err
+		}
 
 		// Add one to the version
 		_, err = m.conn.Exec(ctx, "update "+m.versionTable+" set version=$1", sequence)
