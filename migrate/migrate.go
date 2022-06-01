@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -99,14 +99,14 @@ func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opt
 }
 
 type MigratorFS interface {
-	ReadDir(dirname string) ([]os.FileInfo, error)
+	ReadDir(dirname string) ([]fs.FileInfo, error)
 	ReadFile(filename string) ([]byte, error)
 	Glob(pattern string) (matches []string, err error)
 }
 
 type DefaultMigratorFS struct{}
 
-func (DefaultMigratorFS) ReadDir(dirname string) ([]os.FileInfo, error) {
+func (DefaultMigratorFS) ReadDir(dirname string) ([]fs.FileInfo, error) {
 	return ioutil.ReadDir(dirname)
 }
 
