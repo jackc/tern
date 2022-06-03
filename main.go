@@ -512,7 +512,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 			}
 
 			if mgErr.Position != 0 {
-				ele, err := ExtractErrorLine(mgErr.Sql, int(mgErr.Position))
+				ele, err := migrate.ExtractErrorLine(mgErr.Sql, int(mgErr.Position))
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
@@ -559,7 +559,7 @@ func InstallCode(cmd *cobra.Command, args []string) {
 			}
 
 			if err.Position != 0 {
-				ele, err := ExtractErrorLine(err.Sql, int(err.Position))
+				ele, err := migrate.ExtractErrorLine(err.Sql, int(err.Position))
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
