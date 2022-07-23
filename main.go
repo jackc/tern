@@ -241,7 +241,7 @@ The word "last":
 		Args:  cobra.ExactArgs(1),
 		Run:   SnapshotCode,
 	}
-	cmdCodeSnapshot.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdCodeSnapshot.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 
 	cmdStatus := &cobra.Command{
 		Use:   "status",
@@ -256,7 +256,7 @@ The word "last":
 		Long:  "Generate a new migration with the next sequence number and provided name",
 		Run:   NewMigration,
 	}
-	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 
 	cmdRenumber := &cobra.Command{
 		Use:   "renumber COMMAND",
@@ -269,7 +269,7 @@ The word "last":
 		Long:  "Start renumbering with the current migration numbering preserved",
 		Run:   RenumberStart,
 	}
-	cmdRenumberStart.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdRenumberStart.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 
 	cmdRenumberFinish := &cobra.Command{
 		Use:   "finish",
@@ -278,7 +278,7 @@ The word "last":
 
 		Run: RenumberFinish,
 	}
-	cmdRenumberFinish.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdRenumberFinish.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 
 	cmdVersion := &cobra.Command{
 		Use:   "version",
@@ -326,7 +326,7 @@ func addCoreConfigFlagsToCommand(cmd *cobra.Command) {
 }
 
 func addConfigFlagsToCommand(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmd.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 	addCoreConfigFlagsToCommand(cmd)
 }
 
@@ -851,9 +851,14 @@ func LoadConfig() (*Config, error) {
 	} else {
 		return nil, err
 	}
-
-	// Set default config path only if it exists
+	// If no config path was set in CLI argument look in environment.
 	if cliOptions.configPath == "" {
+		cliOptions.configPath = os.Getenv("TERN_CONFIG")
+	}
+
+	// If no config path was set in CLI or environment try default location.
+	if cliOptions.configPath == "" {
+		// Set default config path only if file exists.
 		if _, err := os.Stat("./tern.conf"); err == nil {
 			cliOptions.configPath = "./tern.conf"
 		}
@@ -864,6 +869,16 @@ func LoadConfig() (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	// If no migrations path was set in CLI argument look in environment.
+	if cliOptions.migrationsPath == "" {
+		cliOptions.migrationsPath = os.Getenv("TERN_MIGRATIONS")
+	}
+
+	// If no migrations path was set in CLI argument or environment use default.
+	if cliOptions.migrationsPath == "" {
+		cliOptions.migrationsPath = "."
 	}
 
 	err := appendConfigFromCLIArgs(config)

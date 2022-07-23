@@ -113,6 +113,10 @@ as test, development, and production in several ways.
 * Program arguments for database settings and optionally one config file for
   shared settings
 
+In addition to program arguments, `TERN_CONFIG` and `TERN_MIGRATIONS`
+environment variables may be used to set the config path and migrations path
+respectively.
+
 ## Migrations
 
 To create a new migration:
@@ -386,6 +390,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 * Replace MigratorFS interface with fs.FS
 * Upgrade to pgx v5
 * Upgrade to sprig v3
+* Add TERN_CONFIG and TERN_MIGRATIONS environment variables
 
 ## 1.13.0 (April 21, 2022)
 
