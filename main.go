@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
@@ -98,6 +99,7 @@ var cliOptions struct {
 	destinationVersion string
 	migrationsPath     string
 	configPath         string
+	editNewMigration   bool
 
 	connString   string
 	host         string
@@ -257,6 +259,7 @@ The word "last":
 		Run:   NewMigration,
 	}
 	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
+	cmdNew.Flags().BoolVarP(&cliOptions.editNewMigration, "edit", "e", false, "open new migration in EDITOR")
 
 	cmdRenumber := &cobra.Command{
 		Use:   "renumber COMMAND",
@@ -386,6 +389,16 @@ func NewMigration(cmd *cobra.Command, args []string) {
 
 	name := args[0]
 
+	// If no migrations path was set in CLI argument look in environment.
+	if cliOptions.migrationsPath == "" {
+		cliOptions.migrationsPath = os.Getenv("TERN_MIGRATIONS")
+	}
+
+	// If no migrations path was set in CLI argument or environment use default.
+	if cliOptions.migrationsPath == "" {
+		cliOptions.migrationsPath = "."
+	}
+
 	migrationsPath := cliOptions.migrationsPath
 	migrations, err := migrate.FindMigrations(os.DirFS(migrationsPath))
 	if err != nil {
@@ -408,6 +421,21 @@ func NewMigration(cmd *cobra.Command, args []string) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+
+	if cliOptions.editNewMigration {
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			fmt.Fprintln(os.Stderr, "EDITOR environment variable not set")
+			os.Exit(1)
+		}
+
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("%s '%s'", editor, mPath))
+		err := cmd.Start()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Failed to start editor:", err)
+			os.Exit(1)
+		}
 	}
 
 }
