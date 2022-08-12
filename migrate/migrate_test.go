@@ -143,6 +143,25 @@ func TestFindMigrationsWithGaps(t *testing.T) {
 	require.EqualError(t, err, "Missing migration 2")
 }
 
+func TestFindMigrationsUnsorted(t *testing.T) {
+	migrations, err := migrate.FindMigrations(os.DirFS("testdata/unsorted"))
+
+	require.NoError(t, err)
+
+	require.Len(t, migrations, 10)
+
+	assert.Equal(t, "1_empty.sql", migrations[0])
+	assert.Equal(t, "2_empty.sql", migrations[1])
+	assert.Equal(t, "3_empty.sql", migrations[2])
+	assert.Equal(t, "4_empty.sql", migrations[3])
+	assert.Equal(t, "5_empty.sql", migrations[4])
+	assert.Equal(t, "6_empty.sql", migrations[5])
+	assert.Equal(t, "7_empty.sql", migrations[6])
+	assert.Equal(t, "8_empty.sql", migrations[7])
+	assert.Equal(t, "9_empty.sql", migrations[8])
+	assert.Equal(t, "10_empty.sql", migrations[9])
+}
+
 func TestFindMigrationsWithDuplicate(t *testing.T) {
 	_, err := migrate.FindMigrations(os.DirFS("testdata/duplicate"))
 	require.EqualError(t, err, "Duplicate migration 2")
