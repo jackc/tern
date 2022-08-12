@@ -127,6 +127,8 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 	}
 
 	paths := make([]string, 0, len(fileInfos))
+	foundMigrations := make([]bool, len(fileInfos))
+
 	for _, fi := range fileInfos {
 		if fi.IsDir() {
 			continue
@@ -143,15 +145,18 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 			return nil, err
 		}
 
-		if n < int64(len(paths)+1) {
+		if foundMigrations[n-1] {
 			return nil, fmt.Errorf("Duplicate migration %d", n)
 		}
 
-		if int64(len(paths)+1) < n {
-			return nil, fmt.Errorf("Missing migration %d", len(paths)+1)
-		}
+		paths = setAt(paths, filepath.Join(path, fi.Name()), n-1)
+		foundMigrations[n-1] = true
+	}
 
-		paths = append(paths, filepath.Join(path, fi.Name()))
+	for i, _ := range paths {
+		if !foundMigrations[i] {
+			return nil, fmt.Errorf("Missing migration %d", i+1)
+		}
 	}
 
 	return paths, nil
@@ -431,4 +436,13 @@ func (m *Migrator) versionTableExists(ctx context.Context) (ok bool, err error) 
 		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_tables where schemaname=$1 and tablename=$2", schema, table).Scan(&count)
 	}
 	return count > 0, err
+}
+
+func setAt(strs []string, value string, pos int64) []string {
+	// If pos > length - 1, append empty strings to make it the right size
+	if pos > int64(len(strs))-1 {
+		strs = append(strs, make([]string, 1+pos-int64(len(strs)))...)
+	}
+	strs[pos] = value
+	return strs
 }
