@@ -149,11 +149,12 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 			return nil, fmt.Errorf("Duplicate migration %d", n)
 		}
 
+		// Set at specific index, so that paths are properly sorted
 		paths = setAt(paths, filepath.Join(path, fi.Name()), n-1)
 		foundMigrations[n-1] = true
 	}
 
-	for i, _ := range paths {
+	for i := range paths {
 		if !foundMigrations[i] {
 			return nil, fmt.Errorf("Missing migration %d", i+1)
 		}
