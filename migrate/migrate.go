@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -72,8 +71,6 @@ type Migration struct {
 type MigratorOptions struct {
 	// DisableTx causes the Migrator not to run migrations in a transaction.
 	DisableTx bool
-	// FileSystem is the interface used for collecting the migrations.
-	FileSystem fs.FS
 }
 
 type Migrator struct {
@@ -87,7 +84,7 @@ type Migrator struct {
 
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
 func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{FileSystem: os.DirFS("/")})
+	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{})
 }
 
 // NewMigratorEx initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
