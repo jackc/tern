@@ -359,7 +359,7 @@ Tern will automatically use an SSH agent or `~/.ssh/id_rsa` if available.
 
 ## Embedding Tern
 
-All the actual functionality of tern is in the github.com/jackc/tern/migrate
+All the actual functionality of tern is in the github.com/jackc/tern/v2/migrate
 library. If you need to embed migrations into your own application this
 library can help.
 

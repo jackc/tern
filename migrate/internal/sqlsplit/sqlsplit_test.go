@@ -3,7 +3,7 @@ package sqlsplit_test
 import (
 	"testing"
 
-	"github.com/jackc/tern/migrate/internal/sqlsplit"
+	"github.com/jackc/tern/v2/migrate/internal/sqlsplit"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -22,7 +22,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/tern/migrate"
+	"github.com/jackc/tern/v2/migrate"
 	"github.com/spf13/cobra"
 	ini "github.com/vaughan0/go-ini"
 )

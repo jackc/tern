@@ -15,7 +15,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/tern/migrate/internal/sqlsplit"
+	"github.com/jackc/tern/v2/migrate/internal/sqlsplit"
 )
 
 var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
