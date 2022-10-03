@@ -1,4 +1,4 @@
-module github.com/jackc/tern
+module github.com/jackc/tern/v2
 
 go 1.18
 
