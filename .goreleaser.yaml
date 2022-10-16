@@ -1,0 +1,15 @@
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    main: ./
+    ldflags:
+      - -s -w
+
+archives:
+  - format: tar.gz
+    files:
+      - LICENSE
