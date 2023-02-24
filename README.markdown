@@ -123,7 +123,7 @@ To create a new migration:
 
     tern new name_of_migration
 
-This will create a migration file with the given name prefixed by the next available sequence number (e.g. 001, 002, 003).
+This will create a migration file with the given name prefixed by the next available sequence number (e.g. 001, 002, 003). The `-e` flag can be used to automatically open the new file in `EDITOR`.
 
 The migrations themselves have an extremely simple file format. They are
 simply the up and down SQL statements divided by a magic comment.
