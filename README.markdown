@@ -394,6 +394,9 @@ is still available through RubyGems and the source code is on the ruby branch.
 * Upgrade to pgx v5
 * Upgrade to sprig v3
 * Add TERN_CONFIG and TERN_MIGRATIONS environment variables
+* Add -e flag to tern new to open file in EDITOR
+* Add per migration `disable-tx` option
+* Add renumber commands to help when merging branches that have conflicting migration numbers
 
 ## 1.13.0 (April 21, 2022)
 
