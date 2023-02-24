@@ -387,7 +387,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
-## Unreleased 2
+## 2.0.0 (February 23, 2023)
 
 * Remove deprecated env access syntax in config file
 * Replace MigratorFS interface with fs.FS

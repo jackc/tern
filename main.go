@@ -27,7 +27,7 @@ import (
 	ini "github.com/vaughan0/go-ini"
 )
 
-const VERSION = "2-dev"
+const VERSION = "2.0.0"
 
 var defaultConf = `[database]
 # host is required (network host or path to Unix domain socket)
