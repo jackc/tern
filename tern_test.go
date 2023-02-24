@@ -361,7 +361,7 @@ version:  0 of 2`
 func TestConnStringCLIArg(t *testing.T) {
 	// Ensure database is in clean state
 	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
-	connString := os.Getenv("MIGRATE_TEST_CONN_STRING")
+	connString := os.Getenv("TERN_TEST_CONN_STRING")
 
 	output := tern(t, "status",
 		"-m", "testdata",
