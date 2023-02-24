@@ -5,20 +5,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
+	"github.com/Masterminds/sprig/v3"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/tern/v2/migrate/internal/sqlsplit"
 )
 
 var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
+var disableTxPattern = regexp.MustCompile(`(?m)^---- tern: disable-tx ----$`)
 
 var ErrNoFwMigration = errors.New("no sql in forward migration step")
 
@@ -37,11 +38,10 @@ func (e IrreversibleMigrationError) Error() string {
 }
 
 type NoMigrationsFoundError struct {
-	Path string
 }
 
 func (e NoMigrationsFoundError) Error() string {
-	return fmt.Sprintf("No migrations found at %s", e.Path)
+	return "migrations not found"
 }
 
 type MigrationPgError struct {
@@ -71,8 +71,6 @@ type Migration struct {
 type MigratorOptions struct {
 	// DisableTx causes the Migrator not to run migrations in a transaction.
 	DisableTx bool
-	// MigratorFS is the interface used for collecting the migrations.
-	MigratorFS MigratorFS
 }
 
 type Migrator struct {
@@ -86,7 +84,7 @@ type Migrator struct {
 
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
 func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{MigratorFS: DefaultMigratorFS{}})
+	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{})
 }
 
 // NewMigratorEx initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
@@ -98,30 +96,9 @@ func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opt
 	return
 }
 
-type MigratorFS interface {
-	ReadDir(dirname string) ([]os.FileInfo, error)
-	ReadFile(filename string) ([]byte, error)
-	Glob(pattern string) (matches []string, err error)
-}
-
-type DefaultMigratorFS struct{}
-
-func (DefaultMigratorFS) ReadDir(dirname string) ([]os.FileInfo, error) {
-	return ioutil.ReadDir(dirname)
-}
-
-func (DefaultMigratorFS) ReadFile(filename string) ([]byte, error) {
-	return ioutil.ReadFile(filename)
-}
-
-func (DefaultMigratorFS) Glob(pattern string) ([]string, error) {
-	return filepath.Glob(pattern)
-}
-
-func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
-	path = strings.TrimRight(path, string(filepath.Separator))
-
-	fileInfos, err := fs.ReadDir(path)
+// FindMigrations finds all migration files in fsys.
+func FindMigrations(fsys fs.FS) ([]string, error) {
+	fileInfos, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +127,7 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 		}
 
 		// Set at specific index, so that paths are properly sorted
-		paths = setAt(paths, filepath.Join(path, fi.Name()), n-1)
+		paths = setAt(paths, fi.Name(), n-1)
 		foundMigrations[n-1] = true
 	}
 
@@ -163,17 +140,15 @@ func FindMigrationsEx(path string, fs MigratorFS) ([]string, error) {
 	return paths, nil
 }
 
-func FindMigrations(path string) ([]string, error) {
-	return FindMigrationsEx(path, DefaultMigratorFS{})
-}
-
-func (m *Migrator) LoadMigrations(path string) error {
-	path = strings.TrimRight(path, string(filepath.Separator))
-
+func (m *Migrator) LoadMigrations(fsys fs.FS) error {
 	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap()).Funcs(
 		template.FuncMap{
 			"install_snapshot": func(name string) (string, error) {
-				codePackage, err := LoadCodePackageEx(filepath.Join(path, "snapshots", name), m.options.MigratorFS)
+				codePackageFSys, err := fs.Sub(fsys, filepath.Join("snapshots", name))
+				if err != nil {
+					return "", err
+				}
+				codePackage, err := LoadCodePackage(codePackageFSys)
 				if err != nil {
 					return "", err
 				}
@@ -183,35 +158,34 @@ func (m *Migrator) LoadMigrations(path string) error {
 		},
 	)
 
-	sharedPaths, err := m.options.MigratorFS.Glob(filepath.Join(path, "*", "*.sql"))
+	sharedPaths, err := fs.Glob(fsys, filepath.Join("*", "*.sql"))
 	if err != nil {
 		return err
 	}
 
 	for _, p := range sharedPaths {
-		body, err := m.options.MigratorFS.ReadFile(p)
+		body, err := fs.ReadFile(fsys, p)
 		if err != nil {
 			return err
 		}
 
-		name := strings.Replace(p, path+string(filepath.Separator), "", 1)
-		_, err = mainTmpl.New(name).Parse(string(body))
+		_, err = mainTmpl.New(p).Parse(string(body))
 		if err != nil {
 			return err
 		}
 	}
 
-	paths, err := FindMigrationsEx(path, m.options.MigratorFS)
+	paths, err := FindMigrations(fsys)
 	if err != nil {
 		return err
 	}
 
 	if len(paths) == 0 {
-		return NoMigrationsFoundError{Path: path}
+		return NoMigrationsFoundError{}
 	}
 
 	for _, p := range paths {
-		body, err := m.options.MigratorFS.ReadFile(p)
+		body, err := fs.ReadFile(fsys, p)
 		if err != nil {
 			return err
 		}
@@ -352,8 +326,22 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 			}
 		}
 
+		useTx := !m.options.DisableTx
+		var sqlStatements []string
+		if disableTxPattern.MatchString(sql) {
+			useTx = false
+			sql = disableTxPattern.ReplaceAllLiteralString(sql, "")
+		} else {
+		}
+
+		if useTx {
+			sqlStatements = []string{sql}
+		} else {
+			sqlStatements = sqlsplit.Split(sql)
+		}
+
 		var tx pgx.Tx
-		if !m.options.DisableTx {
+		if useTx {
 			tx, err = m.conn.Begin(ctx)
 			if err != nil {
 				return err
@@ -367,12 +355,14 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		}
 
 		// Execute the migration
-		_, err = m.conn.Exec(ctx, sql)
-		if err != nil {
-			if err, ok := err.(*pgconn.PgError); ok {
-				return MigrationPgError{MigrationName: current.Name, Sql: sql, PgError: err}
+		for _, statement := range sqlStatements {
+			_, err = m.conn.Exec(ctx, statement)
+			if err != nil {
+				if err, ok := err.(*pgconn.PgError); ok {
+					return MigrationPgError{MigrationName: current.Name, Sql: statement, PgError: err}
+				}
+				return err
 			}
-			return err
 		}
 
 		// Reset all database connection settings. Important to do before updating version as search_path may have been changed.
@@ -384,7 +374,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 			return err
 		}
 
-		if !m.options.DisableTx {
+		if useTx {
 			err = tx.Commit(ctx)
 			if err != nil {
 				return err

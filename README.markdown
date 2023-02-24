@@ -1,5 +1,7 @@
 # Tern - The SQL Fan's Migrator
 
+This is the documentation for the unreleased development version v2.
+
 Tern is a standalone migration tool for PostgreSQL. It includes traditional migrations as well as a separate optional
 workflow for managing database code such as functions and views.
 
@@ -12,13 +14,9 @@ workflow for managing database code such as functions and views.
 
 ## Installation
 
-Go versions up to and including 1.17:
-
-    go get -u github.com/jackc/tern
-
-Go versions 1.17 and higher:
-
-    go install github.com/jackc/tern@latest
+```
+go install github.com/jackc/tern@latest
+```
 
 ## Creating a Tern Project
 
@@ -115,13 +113,17 @@ as test, development, and production in several ways.
 * Program arguments for database settings and optionally one config file for
   shared settings
 
+In addition to program arguments, `TERN_CONFIG` and `TERN_MIGRATIONS`
+environment variables may be used to set the config path and migrations path
+respectively.
+
 ## Migrations
 
 To create a new migration:
 
     tern new name_of_migration
 
-This will create a migration file with the given name prefixed by the next available sequence number (e.g. 001, 002, 003).
+This will create a migration file with the given name prefixed by the next available sequence number (e.g. 001, 002, 003). The `-e` flag can be used to automatically open the new file in `EDITOR`.
 
 The migrations themselves have an extremely simple file format. They are
 simply the up and down SQL statements divided by a magic comment.
@@ -176,6 +178,12 @@ Tern uses the standard Go
 and other advanced templating features are available if needed. See the
 package docs for details. [Sprig](http://masterminds.github.io/sprig/)
 functions are also available.
+
+Migrations are wrapped in a transaction by default. Some SQL statements such as `create index concurrently` cannot be performed within a transaction. To disable the transaction include the magic comment:
+
+```
+---- tern: disable-tx ----
+```
 
 ## Migrating
 
@@ -351,7 +359,7 @@ Tern will automatically use an SSH agent or `~/.ssh/id_rsa` if available.
 
 ## Embedding Tern
 
-All the actual functionality of tern is in the github.com/jackc/tern/migrate
+All the actual functionality of tern is in the github.com/jackc/tern/v2/migrate
 library. If you need to embed migrations into your own application this
 library can help.
 
@@ -359,14 +367,17 @@ library can help.
 
 To run the tests tern requires two test databases to run migrations against.
 
-1. Create a new database for main tern program tests.
+1. Create a new database for main tern program tests (e.g. `tern_test`).
 2. Open testdata/tern.conf.example
 3. Enter the connection information.
-4. Save as testdata/tern.conf.
-5. Create another database for the migrate library tests.
-6. Run tests with the connection string for the migrate library tests in the MIGRATE_TEST_CONN_STRING environment variable
+4. Run tests with the connection string for the main tern program tests in the TERN_TEST_CONN_STRING environment variable.
+5. Save as testdata/tern.conf.
+6. Create another database for the migrate library tests (e.g. `tern_migrate_test`).
+7. Run tests with the connection string for the migrate library tests in the MIGRATE_TEST_CONN_STRING environment variable
 
-    MIGRATE_TEST_CONN_STRING="host=/private/tmp database=tern_migrate_test" go test ./...
+```
+TERN_TEST_CONN_STRING="host=/private/tmp database=tern_test" MIGRATE_TEST_CONN_STRING="host=/private/tmp database=tern_migrate_test" go test ./...
+```
 
 ## Prior Ruby Gem Version
 
@@ -375,6 +386,17 @@ Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
+
+## 2.0.0 (February 23, 2023)
+
+* Remove deprecated env access syntax in config file
+* Replace MigratorFS interface with fs.FS
+* Upgrade to pgx v5
+* Upgrade to sprig v3
+* Add TERN_CONFIG and TERN_MIGRATIONS environment variables
+* Add -e flag to tern new to open file in EDITOR
+* Add per migration `disable-tx` option
+* Add renumber commands to help when merging branches that have conflicting migration numbers
 
 ## 1.13.0 (April 21, 2022)
 

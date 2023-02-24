@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
@@ -19,14 +20,14 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/Masterminds/sprig"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/tern/migrate"
+	"github.com/Masterminds/sprig/v3"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/tern/v2/migrate"
 	"github.com/spf13/cobra"
 	ini "github.com/vaughan0/go-ini"
 )
 
-const VERSION = "1.13.0"
+const VERSION = "2.0.0"
 
 var defaultConf = `[database]
 # host is required (network host or path to Unix domain socket)
@@ -98,6 +99,7 @@ var cliOptions struct {
 	destinationVersion string
 	migrationsPath     string
 	configPath         string
+	editNewMigration   bool
 
 	connString   string
 	host         string
@@ -241,7 +243,7 @@ The word "last":
 		Args:  cobra.ExactArgs(1),
 		Run:   SnapshotCode,
 	}
-	cmdCodeSnapshot.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdCodeSnapshot.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 
 	cmdStatus := &cobra.Command{
 		Use:   "status",
@@ -256,7 +258,8 @@ The word "last":
 		Long:  "Generate a new migration with the next sequence number and provided name",
 		Run:   NewMigration,
 	}
-	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdNew.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
+	cmdNew.Flags().BoolVarP(&cliOptions.editNewMigration, "edit", "e", false, "open new migration in EDITOR")
 
 	cmdRenumber := &cobra.Command{
 		Use:   "renumber COMMAND",
@@ -269,7 +272,7 @@ The word "last":
 		Long:  "Start renumbering with the current migration numbering preserved",
 		Run:   RenumberStart,
 	}
-	cmdRenumberStart.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdRenumberStart.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 
 	cmdRenumberFinish := &cobra.Command{
 		Use:   "finish",
@@ -278,7 +281,7 @@ The word "last":
 
 		Run: RenumberFinish,
 	}
-	cmdRenumberFinish.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmdRenumberFinish.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 
 	cmdVersion := &cobra.Command{
 		Use:   "version",
@@ -326,7 +329,7 @@ func addCoreConfigFlagsToCommand(cmd *cobra.Command) {
 }
 
 func addConfigFlagsToCommand(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", ".", "migrations path")
+	cmd.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 	addCoreConfigFlagsToCommand(cmd)
 }
 
@@ -386,8 +389,18 @@ func NewMigration(cmd *cobra.Command, args []string) {
 
 	name := args[0]
 
+	// If no migrations path was set in CLI argument look in environment.
+	if cliOptions.migrationsPath == "" {
+		cliOptions.migrationsPath = os.Getenv("TERN_MIGRATIONS")
+	}
+
+	// If no migrations path was set in CLI argument or environment use default.
+	if cliOptions.migrationsPath == "" {
+		cliOptions.migrationsPath = "."
+	}
+
 	migrationsPath := cliOptions.migrationsPath
-	migrations, err := migrate.FindMigrations(migrationsPath)
+	migrations, err := migrate.FindMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -408,6 +421,21 @@ func NewMigration(cmd *cobra.Command, args []string) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+
+	if cliOptions.editNewMigration {
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			fmt.Fprintln(os.Stderr, "EDITOR environment variable not set")
+			os.Exit(1)
+		}
+
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("%s '%s'", editor, mPath))
+		err := cmd.Start()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Failed to start editor:", err)
+			os.Exit(1)
+		}
 	}
 
 }
@@ -447,7 +475,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 	migrator.Data = config.Data
 
 	migrationsPath := cliOptions.migrationsPath
-	err = migrator.LoadMigrations(migrationsPath)
+	err = migrator.LoadMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -512,7 +540,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 			}
 
 			if mgErr.Position != 0 {
-				ele, err := ExtractErrorLine(mgErr.Sql, int(mgErr.Position))
+				ele, err := migrate.ExtractErrorLine(mgErr.Sql, int(mgErr.Position))
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
@@ -534,7 +562,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 func InstallCode(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	codePackage, err := migrate.LoadCodePackage(path)
+	codePackage, err := migrate.LoadCodePackage(os.DirFS(path))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
 		os.Exit(1)
@@ -559,7 +587,7 @@ func InstallCode(cmd *cobra.Command, args []string) {
 			}
 
 			if err.Position != 0 {
-				ele, err := ExtractErrorLine(err.Sql, int(err.Position))
+				ele, err := migrate.ExtractErrorLine(err.Sql, int(err.Position))
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
@@ -581,7 +609,7 @@ func InstallCode(cmd *cobra.Command, args []string) {
 func CompileCode(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	codePackage, err := migrate.LoadCodePackage(path)
+	codePackage, err := migrate.LoadCodePackage(os.DirFS(path))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
 		os.Exit(1)
@@ -611,14 +639,14 @@ func CompileCode(cmd *cobra.Command, args []string) {
 func SnapshotCode(cmd *cobra.Command, args []string) {
 	path := args[0]
 
-	_, err := migrate.LoadCodePackage(path)
+	_, err := migrate.LoadCodePackage(os.DirFS(path))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load code package:\n  %v\n", err)
 		os.Exit(1)
 	}
 
 	migrationsPath := cliOptions.migrationsPath
-	migrations, err := migrate.FindMigrations(migrationsPath)
+	migrations, err := migrate.FindMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -664,7 +692,7 @@ func Status(cmd *cobra.Command, args []string) {
 	migrator.Data = config.Data
 
 	migrationsPath := cliOptions.migrationsPath
-	err = migrator.LoadMigrations(migrationsPath)
+	err = migrator.LoadMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -696,7 +724,7 @@ func Status(cmd *cobra.Command, args []string) {
 
 func RenumberStart(cmd *cobra.Command, args []string) {
 	migrationsPath := cliOptions.migrationsPath
-	migrations, err := migrate.FindMigrations(migrationsPath)
+	migrations, err := migrate.FindMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
 		os.Exit(1)
@@ -851,9 +879,14 @@ func LoadConfig() (*Config, error) {
 	} else {
 		return nil, err
 	}
-
-	// Set default config path only if it exists
+	// If no config path was set in CLI argument look in environment.
 	if cliOptions.configPath == "" {
+		cliOptions.configPath = os.Getenv("TERN_CONFIG")
+	}
+
+	// If no config path was set in CLI or environment try default location.
+	if cliOptions.configPath == "" {
+		// Set default config path only if file exists.
 		if _, err := os.Stat("./tern.conf"); err == nil {
 			cliOptions.configPath = "./tern.conf"
 		}
@@ -864,6 +897,16 @@ func LoadConfig() (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	// If no migrations path was set in CLI argument look in environment.
+	if cliOptions.migrationsPath == "" {
+		cliOptions.migrationsPath = os.Getenv("TERN_MIGRATIONS")
+	}
+
+	// If no migrations path was set in CLI argument or environment use default.
+	if cliOptions.migrationsPath == "" {
+		cliOptions.migrationsPath = "."
 	}
 
 	err := appendConfigFromCLIArgs(config)
@@ -887,13 +930,6 @@ func LoadConfig() (*Config, error) {
 }
 
 func appendConfigFromFile(config *Config, path string) error {
-	// Accessing the environment through this map is deprecated now that the env function from sprig is available.
-	env := make(map[string]string)
-	for _, s := range os.Environ() {
-		parts := strings.SplitN(s, "=", 2)
-		env[parts[0]] = parts[1]
-	}
-
 	fileBytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
@@ -905,9 +941,7 @@ func appendConfigFromFile(config *Config, path string) error {
 	}
 
 	var buf bytes.Buffer
-	err = confTemplate.Execute(&buf, map[string]interface{}{
-		"env": env,
-	})
+	err = confTemplate.Execute(&buf, map[string]interface{}{})
 	if err != nil {
 		return err
 	}

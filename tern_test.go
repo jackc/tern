@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vaughan0/go-ini"
@@ -305,42 +305,7 @@ func TestConfigFileTemplateEvalWithEnvVar(t *testing.T) {
 	}()
 
 	output := tern(t, "status",
-		"-c", "testdata/tern-envvar-deprecated.conf",
-		"-m", "testdata",
-		"--port", strconv.FormatInt(int64(connConfig.Port), 10),
-		"--user", connConfig.User,
-		"--password", connConfig.Password,
-		"--database", connConfig.Database,
-	)
-	expected := `status:   migration(s) pending
-version:  0 of 2`
-	if !strings.Contains(output, expected) {
-		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
-	}
-}
-
-func TestConfigFileTemplateEvalWithDeprecatedEnvVar(t *testing.T) {
-	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
-
-	connConfig, err := readConfig("testdata/tern.conf")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.Setenv("TERNHOST", connConfig.Host)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		err := os.Unsetenv("TERNHOST")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	output := tern(t, "status",
-		"-c", "testdata/tern-envvar-deprecated.conf",
+		"-c", "testdata/tern-envvar.conf",
 		"-m", "testdata",
 		"--port", strconv.FormatInt(int64(connConfig.Port), 10),
 		"--user", connConfig.User,
@@ -396,7 +361,7 @@ version:  0 of 2`
 func TestConnStringCLIArg(t *testing.T) {
 	// Ensure database is in clean state
 	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
-	connString := os.Getenv("MIGRATE_TEST_CONN_STRING")
+	connString := os.Getenv("TERN_TEST_CONN_STRING")
 
 	output := tern(t, "status",
 		"-m", "testdata",
