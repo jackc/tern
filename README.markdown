@@ -13,7 +13,7 @@ workflow for managing database code such as functions and views.
 ## Installation
 
 ```
-go install github.com/jackc/tern@latest
+go install github.com/jackc/tern/v2@latest
 ```
 
 ## Creating a Tern Project
