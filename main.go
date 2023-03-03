@@ -431,13 +431,15 @@ func NewMigration(cmd *cobra.Command, args []string) {
 		}
 
 		cmd := exec.Command("sh", "-c", fmt.Sprintf("%s '%s'", editor, mPath))
-		err := cmd.Start()
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Failed to start editor:", err)
 			os.Exit(1)
 		}
 	}
-
 }
 
 func loadConfigAndConnectToDB(ctx context.Context) (*Config, *pgx.Conn) {
@@ -676,7 +678,6 @@ func SnapshotCode(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
 }
 
 func Status(cmd *cobra.Command, args []string) {
