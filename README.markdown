@@ -385,6 +385,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.0.1 (March 2, 2023)
+
+* Fix -e flag with terminal editors (abs3nt)
+
 ## 2.0.0 (February 23, 2023)
 
 * Remove deprecated env access syntax in config file
