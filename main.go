@@ -153,7 +153,7 @@ func (c *Config) Connect(ctx context.Context) (*pgx.Conn, error) {
 	// functionality.
 	switch c.SslMode {
 	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
-		if err := os.Setenv("PGPORT", strconv.FormatUint(uint64(c.ConnConfig.Port), 10)); err != nil {
+		if err := os.Setenv("PGPORT", strconv.Itoa(int(c.ConnConfig.Port))); err != nil {
 			return nil, err
 		}
 		if err := os.Setenv("PGHOST", c.ConnConfig.Host); err != nil {
