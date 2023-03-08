@@ -153,6 +153,9 @@ func (c *Config) Connect(ctx context.Context) (*pgx.Conn, error) {
 	// functionality.
 	switch c.SslMode {
 	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+		if err := os.Setenv("PGPORT", strconv.Itoa(int(c.ConnConfig.Port))); err != nil {
+			return nil, err
+		}
 		if err := os.Setenv("PGHOST", c.ConnConfig.Host); err != nil {
 			return nil, err
 		}
@@ -170,7 +173,6 @@ func (c *Config) Connect(ctx context.Context) (*pgx.Conn, error) {
 			return nil, err
 		}
 	}
-
 	return pgx.ConnectConfig(ctx, &c.ConnConfig)
 }
 
@@ -352,7 +354,7 @@ func Init(cmd *cobra.Command, args []string) {
 
 	// Write default conf file
 	confPath := filepath.Join(directory, "tern.conf")
-	confFile, err := os.OpenFile(confPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
+	confFile, err := os.OpenFile(confPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o666)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -367,7 +369,7 @@ func Init(cmd *cobra.Command, args []string) {
 
 	// Write sample migration
 	smPath := filepath.Join(directory, "001_create_people.sql.example")
-	smFile, err := os.OpenFile(smPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
+	smFile, err := os.OpenFile(smPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o666)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -410,7 +412,7 @@ func NewMigration(cmd *cobra.Command, args []string) {
 
 	// Write new migration
 	mPath := filepath.Join(migrationsPath, newMigrationName)
-	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
+	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o666)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -666,7 +668,7 @@ func SnapshotCode(cmd *cobra.Command, args []string) {
 
 	// Write new migration
 	mPath := filepath.Join(migrationsPath, newMigrationName)
-	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
+	mFile, err := os.OpenFile(mPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o666)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -926,7 +928,6 @@ func LoadConfig() (*Config, error) {
 	if config.SSHConnConfig.Port == "" {
 		config.SSHConnConfig.Port = "ssh"
 	}
-
 	return config, nil
 }
 
