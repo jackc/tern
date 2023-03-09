@@ -18,8 +18,10 @@ import (
 	"github.com/jackc/tern/v2/migrate/internal/sqlsplit"
 )
 
-var migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
-var disableTxPattern = regexp.MustCompile(`(?m)^---- tern: disable-tx ----$`)
+var (
+	migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
+	disableTxPattern = regexp.MustCompile(`(?m)^---- tern: disable-tx ----$`)
+)
 
 var ErrNoFwMigration = errors.New("no sql in forward migration step")
 
@@ -37,8 +39,7 @@ func (e IrreversibleMigrationError) Error() string {
 	return fmt.Sprintf("Irreversible migration: %d - %s", e.m.Sequence, e.m.Name)
 }
 
-type NoMigrationsFoundError struct {
-}
+type NoMigrationsFoundError struct{}
 
 func (e NoMigrationsFoundError) Error() string {
 	return "migrations not found"
@@ -331,7 +332,6 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		if disableTxPattern.MatchString(sql) {
 			useTx = false
 			sql = disableTxPattern.ReplaceAllLiteralString(sql, "")
-		} else {
 		}
 
 		if useTx {
