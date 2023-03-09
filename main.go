@@ -584,14 +584,14 @@ func InstallCode(cmd *cobra.Command, args []string) {
 
 	err = migrate.LockExecTx(ctx, conn, sql)
 	if err != nil {
-		if err, ok := err.(migrate.MigrationPgError); ok {
-			fmt.Fprintln(os.Stderr, err)
-			if err.Detail != "" {
-				fmt.Fprintln(os.Stderr, "DETAIL:", err.Detail)
+		if migrationpgError, ok := err.(migrate.MigrationPgError); ok {
+			fmt.Fprintln(os.Stderr, migrationpgError)
+			if migrationpgError.Detail != "" {
+				fmt.Fprintln(os.Stderr, "DETAIL:", migrationpgError.Detail)
 			}
 
-			if err.Position != 0 {
-				ele, err := migrate.ExtractErrorLine(err.Sql, int(err.Position))
+			if migrationpgError.Position != 0 {
+				ele, err := migrate.ExtractErrorLine(migrationpgError.Sql, int(migrationpgError.Position))
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
