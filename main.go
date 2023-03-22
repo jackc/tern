@@ -98,7 +98,7 @@ type Config struct {
 var cliOptions struct {
 	destinationVersion string
 	migrationsPath     string
-	configPath         string
+	configPaths        []string
 	editNewMigration   bool
 
 	connString   string
@@ -237,7 +237,7 @@ The word "last":
 		Args:  cobra.ExactArgs(1),
 		Run:   CompileCode,
 	}
-	cmdCodeCompile.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
+	cmdCodeCompile.Flags().StringSliceVarP(&cliOptions.configPaths, "config", "c", []string{}, "config path (default is ./tern.conf)")
 
 	cmdCodeSnapshot := &cobra.Command{
 		Use:   "snapshot PATH",
@@ -312,7 +312,7 @@ The word "last":
 }
 
 func addCoreConfigFlagsToCommand(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&cliOptions.configPath, "config", "c", "", "config path (default is ./tern.conf)")
+	cmd.Flags().StringSliceVarP(&cliOptions.configPaths, "config", "c", []string{}, "config path (default is ./tern.conf)")
 
 	cmd.Flags().StringVarP(&cliOptions.connString, "conn-string", "", "", "database connection string (https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING)")
 	cmd.Flags().StringVarP(&cliOptions.host, "host", "", "", "database host")
@@ -883,20 +883,21 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 	// If no config path was set in CLI argument look in environment.
-	if cliOptions.configPath == "" {
-		cliOptions.configPath = os.Getenv("TERN_CONFIG")
-	}
-
-	// If no config path was set in CLI or environment try default location.
-	if cliOptions.configPath == "" {
-		// Set default config path only if file exists.
-		if _, err := os.Stat("./tern.conf"); err == nil {
-			cliOptions.configPath = "./tern.conf"
+	if len(cliOptions.configPaths) == 0 {
+		if configEnv := os.Getenv("TERN_CONFIG"); configEnv != "" {
+			cliOptions.configPaths = append(cliOptions.configPaths, configEnv)
 		}
 	}
 
-	if cliOptions.configPath != "" {
-		err := appendConfigFromFile(config, cliOptions.configPath)
+	// If no config path was set in CLI or environment try default location.
+	if len(cliOptions.configPaths) == 0 {
+		if _, err := os.Stat("./tern.conf"); err == nil {
+			cliOptions.configPaths = append(cliOptions.configPaths, "./tern.conf")
+		}
+	}
+
+	for _, configFile := range cliOptions.configPaths {
+		err := appendConfigFromFile(config, configFile)
 		if err != nil {
 			return nil, err
 		}
