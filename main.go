@@ -254,6 +254,13 @@ The word "last":
 	}
 	addConfigFlagsToCommand(cmdStatus)
 
+	cmdPsql := &cobra.Command{
+		Use:   "psql",
+		Short: "Connects to database using psql",
+		Run:   Psql,
+	}
+	addConfigFlagsToCommand(cmdPsql)
+
 	cmdNew := &cobra.Command{
 		Use:   "new NAME",
 		Short: "Generate a new migration",
@@ -306,6 +313,7 @@ The word "last":
 	rootCmd.AddCommand(cmdRenumber)
 	rootCmd.AddCommand(cmdCode)
 	rootCmd.AddCommand(cmdStatus)
+	rootCmd.AddCommand(cmdPsql)
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
@@ -678,6 +686,26 @@ func SnapshotCode(cmd *cobra.Command, args []string) {
 	_, err = fmt.Fprintf(mFile, `{{ install_snapshot "%s" }}`, migrationID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func Psql(cmd *cobra.Command, args []string) {
+	ctx := context.Background()
+	config, conn := loadConfigAndConnectToDB(ctx)
+	defer conn.Close(ctx)
+	psql_bin := "psql"
+	if psql_path := os.Getenv("PSQL_BIN_PATH"); psql_path != "" {
+		psql_bin = psql_path
+	}
+	constring := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", config.ConnConfig.User, config.ConnConfig.Password, config.ConnConfig.Host, config.ConnConfig.Port, config.ConnConfig.Database)
+	com := exec.Command(psql_bin, constring)
+	com.Stdin = os.Stdin
+	com.Stdout = os.Stdout
+	com.Stderr = os.Stderr
+	err := com.Run()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to launch psql:", err)
 		os.Exit(1)
 	}
 }
