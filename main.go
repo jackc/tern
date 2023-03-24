@@ -876,7 +876,10 @@ func findMigrationsForRenumber(path string) ([]string, error) {
 }
 
 func LoadConfig() (*Config, error) {
-	config := &Config{VersionTable: "public.schema_version"}
+	config := &Config{
+		VersionTable: "public.schema_version",
+		Data:         make(map[string]interface{}),
+	}
 	if connConfig, err := pgx.ParseConfig(""); err == nil {
 		config.ConnConfig = *connConfig
 	} else {
@@ -1004,7 +1007,6 @@ func appendConfigFromFile(config *Config, path string) error {
 		config.SslRootCert = sslrootcert
 	}
 
-	config.Data = make(map[string]interface{})
 	for key, value := range file["data"] {
 		config.Data[key] = value
 	}
