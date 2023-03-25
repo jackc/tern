@@ -88,6 +88,7 @@ var newMigrationText = `-- Write your migrate up statements here
 
 type Config struct {
 	ConnConfig    pgx.ConnConfig
+	ConnString    string
 	SslMode       string
 	SslRootCert   string
 	VersionTable  string
@@ -698,8 +699,27 @@ func Psql(cmd *cobra.Command, args []string) {
 	if psql_path := os.Getenv("PSQL_BIN_PATH"); psql_path != "" {
 		psql_bin = psql_path
 	}
-	constring := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", config.ConnConfig.User, config.ConnConfig.Password, config.ConnConfig.Host, config.ConnConfig.Port, config.ConnConfig.Database)
-	com := exec.Command(psql_bin, constring)
+
+	connstring := config.ConnString
+	if connstring == "" {
+		options := ""
+		if ssl_mode := config.SslMode; ssl_mode != "" {
+			options += fmt.Sprintf("sslmode=%s&", ssl_mode)
+		}
+		if ssl_cert := config.SslRootCert; ssl_cert != "" {
+			options += fmt.Sprintf("sslcert=%s", ssl_cert)
+		}
+		connstring = fmt.Sprintf(
+			"postgres://%s:%s@%s:%d/%s?%s",
+			config.ConnConfig.User,
+			config.ConnConfig.Password,
+			config.ConnConfig.Host,
+			config.ConnConfig.Port,
+			config.ConnConfig.Database,
+			options,
+		)
+	}
+	com := exec.Command(psql_bin, connstring)
 	com.Stdin = os.Stdin
 	com.Stdout = os.Stdout
 	com.Stderr = os.Stderr
@@ -983,6 +1003,8 @@ func appendConfigFromFile(config *Config, path string) error {
 	}
 
 	if connString, ok := file.Get("database", "conn_string"); ok {
+		config.ConnString = connString
+		fmt.Println(config.ConnString)
 		if connConfig, err := pgx.ParseConfig(connString); err == nil {
 			config.ConnConfig = *connConfig
 		} else {
@@ -1052,7 +1074,6 @@ func appendConfigFromFile(config *Config, path string) error {
 	if password, ok := file.Get("ssh-tunnel", "password"); ok {
 		config.SSHConnConfig.Password = password
 	}
-
 	return nil
 }
 
