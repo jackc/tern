@@ -715,7 +715,7 @@ func PrintConnString(cmd *cobra.Command, args []string) {
 			options,
 		)
 	}
-	fmt.Println(connstring)
+	fmt.Print(connstring)
 }
 
 func Status(cmd *cobra.Command, args []string) {
