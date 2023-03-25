@@ -255,12 +255,12 @@ The word "last":
 	}
 	addConfigFlagsToCommand(cmdStatus)
 
-	cmdPsql := &cobra.Command{
-		Use:   "psql",
-		Short: "Connects to database using psql",
-		Run:   Psql,
+	cmdPrintConnString := &cobra.Command{
+		Use:   "print-connstring",
+		Short: "Prints a connection string based on the provided config file/arguments",
+		Run:   PrintConnString,
 	}
-	addConfigFlagsToCommand(cmdPsql)
+	addConfigFlagsToCommand(cmdPrintConnString)
 
 	cmdNew := &cobra.Command{
 		Use:   "new NAME",
@@ -314,7 +314,7 @@ The word "last":
 	rootCmd.AddCommand(cmdRenumber)
 	rootCmd.AddCommand(cmdCode)
 	rootCmd.AddCommand(cmdStatus)
-	rootCmd.AddCommand(cmdPsql)
+	rootCmd.AddCommand(cmdPrintConnString)
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
@@ -691,14 +691,10 @@ func SnapshotCode(cmd *cobra.Command, args []string) {
 	}
 }
 
-func Psql(cmd *cobra.Command, args []string) {
+func PrintConnString(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
 	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
-	psql_bin := "psql"
-	if psql_path := os.Getenv("PSQL_BIN_PATH"); psql_path != "" {
-		psql_bin = psql_path
-	}
 
 	connstring := config.ConnString
 	if connstring == "" {
@@ -719,15 +715,7 @@ func Psql(cmd *cobra.Command, args []string) {
 			options,
 		)
 	}
-	com := exec.Command(psql_bin, connstring)
-	com.Stdin = os.Stdin
-	com.Stdout = os.Stdout
-	com.Stderr = os.Stderr
-	err := com.Run()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Failed to launch psql:", err)
-		os.Exit(1)
-	}
+	fmt.Println(connstring)
 }
 
 func Status(cmd *cobra.Command, args []string) {
