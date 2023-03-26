@@ -995,7 +995,6 @@ func appendConfigFromFile(config *Config, path string) error {
 
 	if connString, ok := file.Get("database", "conn_string"); ok {
 		config.ConnString = connString
-		fmt.Println(config.ConnString)
 		if connConfig, err := pgx.ParseConfig(connString); err == nil {
 			config.ConnConfig = *connConfig
 		} else {
