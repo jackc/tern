@@ -88,6 +88,7 @@ var newMigrationText = `-- Write your migrate up statements here
 
 type Config struct {
 	ConnConfig    pgx.ConnConfig
+	ConnString    string
 	SslMode       string
 	SslRootCert   string
 	VersionTable  string
@@ -254,6 +255,13 @@ The word "last":
 	}
 	addConfigFlagsToCommand(cmdStatus)
 
+	cmdPrintConnString := &cobra.Command{
+		Use:   "print-connstring",
+		Short: "Prints a connection string based on the provided config file/arguments",
+		Run:   PrintConnString,
+	}
+	addConfigFlagsToCommand(cmdPrintConnString)
+
 	cmdNew := &cobra.Command{
 		Use:   "new NAME",
 		Short: "Generate a new migration",
@@ -306,6 +314,7 @@ The word "last":
 	rootCmd.AddCommand(cmdRenumber)
 	rootCmd.AddCommand(cmdCode)
 	rootCmd.AddCommand(cmdStatus)
+	rootCmd.AddCommand(cmdPrintConnString)
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
@@ -682,6 +691,33 @@ func SnapshotCode(cmd *cobra.Command, args []string) {
 	}
 }
 
+func PrintConnString(cmd *cobra.Command, args []string) {
+	ctx := context.Background()
+	config, conn := loadConfigAndConnectToDB(ctx)
+	defer conn.Close(ctx)
+
+	connstring := config.ConnString
+	if connstring == "" {
+		options := ""
+		if ssl_mode := config.SslMode; ssl_mode != "" {
+			options += fmt.Sprintf("sslmode=%s&", ssl_mode)
+		}
+		if ssl_cert := config.SslRootCert; ssl_cert != "" {
+			options += fmt.Sprintf("sslcert=%s", ssl_cert)
+		}
+		connstring = fmt.Sprintf(
+			"postgres://%s:%s@%s:%d/%s?%s",
+			config.ConnConfig.User,
+			config.ConnConfig.Password,
+			config.ConnConfig.Host,
+			config.ConnConfig.Port,
+			config.ConnConfig.Database,
+			options,
+		)
+	}
+	fmt.Print(connstring)
+}
+
 func Status(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
 	config, conn := loadConfigAndConnectToDB(ctx)
@@ -958,6 +994,7 @@ func appendConfigFromFile(config *Config, path string) error {
 	}
 
 	if connString, ok := file.Get("database", "conn_string"); ok {
+		config.ConnString = connString
 		if connConfig, err := pgx.ParseConfig(connString); err == nil {
 			config.ConnConfig = *connConfig
 		} else {
@@ -1026,7 +1063,6 @@ func appendConfigFromFile(config *Config, path string) error {
 	if password, ok := file.Get("ssh-tunnel", "password"); ok {
 		config.SSHConnConfig.Password = password
 	}
-
 	return nil
 }
 
