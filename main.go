@@ -692,9 +692,11 @@ func SnapshotCode(cmd *cobra.Command, args []string) {
 }
 
 func PrintConnString(cmd *cobra.Command, args []string) {
-	ctx := context.Background()
-	config, conn := loadConfigAndConnectToDB(ctx)
-	defer conn.Close(ctx)
+	config, err := LoadConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	connstring := config.ConnString
 	if connstring == "" {
