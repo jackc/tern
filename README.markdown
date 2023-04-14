@@ -385,6 +385,12 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.1.0 (April 13, 2023)
+
+* Add print-connstring command to CLI (abs3ntdev)
+* Allow multiple config files on CLI (abs3ntdev)
+* Fix port being ignored in config file if sslmode is set (abs3ntdev)
+
 ## 2.0.1 (March 2, 2023)
 
 * Fix -e flag with terminal editors (abs3nt)
