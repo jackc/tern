@@ -105,7 +105,6 @@ func FindMigrations(fsys fs.FS) ([]string, error) {
 	}
 
 	paths := make([]string, 0, len(fileInfos))
-	foundMigrations := make([]bool, len(fileInfos))
 
 	for _, fi := range fileInfos {
 		if fi.IsDir() {
@@ -123,17 +122,16 @@ func FindMigrations(fsys fs.FS) ([]string, error) {
 			return nil, err
 		}
 
-		if foundMigrations[n-1] {
+		if n-1 < int64(len(paths)) && paths[n-1] != "" {
 			return nil, fmt.Errorf("Duplicate migration %d", n)
 		}
 
 		// Set at specific index, so that paths are properly sorted
 		paths = setAt(paths, fi.Name(), n-1)
-		foundMigrations[n-1] = true
 	}
 
-	for i := range paths {
-		if !foundMigrations[i] {
+	for i, path := range paths {
+		if path == "" {
 			return nil, fmt.Errorf("Missing migration %d", i+1)
 		}
 	}
