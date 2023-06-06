@@ -970,6 +970,11 @@ func LoadConfig() (*Config, error) {
 	if config.SSHConnConfig.Port == "" {
 		config.SSHConnConfig.Port = "ssh"
 	}
+
+	if config.ConnConfig.RuntimeParams["application_name"] == "" {
+		config.ConnConfig.RuntimeParams["application_name"] = "tern"
+	}
+
 	return config, nil
 }
 
