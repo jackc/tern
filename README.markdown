@@ -385,6 +385,12 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.1.1 (June 17, 2023)
+
+* Upgrade to pgx v5.4.0 - This should resolve ssh tunnel issues
+* CLI tool sets application_name to "tern" by default
+* Fix FindMigrations panic with missing migrations (Billy Keyes)
+
 ## 2.1.0 (April 13, 2023)
 
 * Add print-connstring command to CLI (abs3ntdev)
