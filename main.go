@@ -101,6 +101,7 @@ var cliOptions struct {
 	migrationsPath     string
 	configPaths        []string
 	editNewMigration   bool
+	gengenOutputFile   string
 
 	connString   string
 	host         string
@@ -320,6 +321,7 @@ Migrations can only go forward to the latest version.
 	cmdGengen.Flags().StringSliceVarP(&cliOptions.configPaths, "config", "c", []string{}, "config path (default is ./tern.conf)")
 	cmdGengen.Flags().StringVarP(&cliOptions.versionTable, "version-table", "", "", "version table name (default is public.schema_version)")
 	cmdGengen.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
+	cmdGengen.Flags().StringVarP(&cliOptions.gengenOutputFile, "output", "o", "", "output file")
 
 	cmdVersion := &cobra.Command{
 		Use:   "version",
@@ -682,7 +684,20 @@ order by version asc;
 
 `))
 
-	err = gengenTemplate.Execute(os.Stdout, map[string]any{
+	var out *os.File
+	if cliOptions.gengenOutputFile == "" {
+		out = os.Stdout
+	} else {
+		var err error
+		out, err = os.Create(cliOptions.gengenOutputFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		defer out.Close()
+	}
+
+	err = gengenTemplate.Execute(out, map[string]any{
 		"Version":      VERSION,
 		"VersionTable": config.VersionTable,
 		"Migrations":   migrator.Migrations,
