@@ -660,6 +660,7 @@ with migrations(version, up_sql) as (
 	values
 	(0,
 $tern_gengen$
+begin;
 create table {{ .VersionTable }}(version int4 not null);
 insert into {{ .VersionTable }}(version) values(0);
 $tern_gengen$)
