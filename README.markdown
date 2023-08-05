@@ -359,7 +359,36 @@ Tern will automatically use an SSH agent or `~/.ssh/id_rsa` if available.
 
 All the actual functionality of tern is in the github.com/jackc/tern/v2/migrate
 library. If you need to embed migrations into your own application this
-library can help.
+library can help. If you don't need the full functionality of tern, then a migration generator script as described below may be a easier way of embedding simple migrations.
+
+## Generating a Migration Generator SQL Script
+
+Sometimes an application or plugin needs to perform migrations but it is not the owner of the database and tern is not
+available.
+
+The `gengen` command generates a SQL script that when run against a database will generate a SQL script with the
+migrations necessary to bring the database to the latest schema version.
+
+For example, a Go job queue library may need to perform database migrations, but it does not want to require its users
+to also use tern. In this case the plugin author would use `gengen` to create a SQL script that inspects that database
+and creates the actual SQL migration script. This script can then be integrated with whatever schema management system
+the host application is using.
+
+Usage:
+
+```
+$ tern gengen > generate-migrations.sql
+$ psql --no-psqlrc --tuples-only --quiet --no-align -f generate-migrations.sql mydb > migrations.sql
+
+# migrations.sql now contains the commands to migrate mydb to the latest schema version. It can be run directly or
+# integrated with another migrate system.
+```
+
+Limitations:
+
+* Every migration runs in a transaction. That is, if a migration has a
+disable-tx magic comment it will be ignored.
+* Migrations can only go forward to the latest version.
 
 ## Running the Tests
 
@@ -384,6 +413,10 @@ Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
+
+## 2.2.0 (Unreleased)
+
+* Add gengen command
 
 ## 2.1.1 (June 17, 2023)
 

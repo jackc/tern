@@ -418,3 +418,29 @@ func TestRenumber(t *testing.T) {
 		require.NoError(t, err)
 	}
 }
+
+func TestGengen(t *testing.T) {
+	gengenSQL := tern(t, "gengen", "-m", "testdata", "-c", "testdata/tern.conf")
+
+	ctx := context.Background()
+	conn := connectConn(t)
+	defer conn.Close(ctx)
+
+	migrationSQL := &strings.Builder{}
+	results, err := conn.PgConn().Exec(ctx, gengenSQL).ReadAll()
+	require.NoError(t, err)
+	for _, result := range results {
+		for _, row := range result.Rows {
+			for _, col := range row {
+				migrationSQL.WriteString(string(col))
+			}
+		}
+	}
+
+	_, err = conn.Exec(ctx, migrationSQL.String())
+	require.NoError(t, err)
+
+	require.True(t, tableExists(t, "t1"))
+	require.True(t, tableExists(t, "t2"))
+	require.EqualValues(t, 2, currentVersion(t))
+}

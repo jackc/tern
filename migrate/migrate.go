@@ -91,7 +91,13 @@ func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *M
 // NewMigratorEx initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
 func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
 	m = &Migrator{conn: conn, versionTable: versionTable, options: opts}
-	err = m.ensureSchemaVersionTableExists(ctx)
+
+	// This is a bit of a kludge for the gengen command. A migrator without a conn is normally not allowed. However, the
+	// gengen command doesn't call any of the methods that require a conn. Potentially, we could refactor Migrator to
+	// split out the migration loading and parsing from the actual migration execution.
+	if conn != nil {
+		err = m.ensureSchemaVersionTableExists(ctx)
+	}
 	m.Migrations = make([]*Migration, 0)
 	m.Data = make(map[string]interface{})
 	return
