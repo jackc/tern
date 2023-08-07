@@ -363,7 +363,7 @@ func addCoreConfigFlagsToCommand(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&cliOptions.versionTable, "version-table", "", "", "version table name (default is public.schema_version)")
 
 	cmd.Flags().StringVarP(&cliOptions.sshHost, "ssh-host", "", "", "SSH tunnel host")
-	cmd.Flags().StringVarP(&cliOptions.sshPort, "ssh-port", "", "22", "SSH tunnel port")
+	cmd.Flags().StringVarP(&cliOptions.sshPort, "ssh-port", "", "", "SSH tunnel port")
 	cmd.Flags().StringVarP(&cliOptions.sshUser, "ssh-user", "", "", "SSH tunnel user (default is OS user")
 	cmd.Flags().StringVarP(&cliOptions.sshPassword, "ssh-password", "", "", "SSH tunnel password (unneeded if using SSH agent authentication)")
 }
