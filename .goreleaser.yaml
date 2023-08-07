@@ -5,6 +5,7 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
     main: ./
     ldflags:
       - -s -w
