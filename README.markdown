@@ -397,13 +397,13 @@ To run the tests tern requires two test databases to run migrations against.
 1. Create a new database for main tern program tests (e.g. `tern_test`).
 2. Open testdata/tern.conf.example
 3. Enter the connection information.
-4. Run tests with the connection string for the main tern program tests in the TERN_TEST_CONN_STRING environment variable.
-5. Save as testdata/tern.conf.
+4. Save as testdata/tern.conf.
+5. Run tests with the connection string for the main tern program tests in the TERN_TEST_CONN_STRING environment variable.
 6. Create another database for the migrate library tests (e.g. `tern_migrate_test`).
 7. Run tests with the connection string for the migrate library tests in the MIGRATE_TEST_CONN_STRING environment variable
 
 ```
-TERN_TEST_CONN_STRING="host=/private/tmp database=tern_test" MIGRATE_TEST_CONN_STRING="host=/private/tmp database=tern_migrate_test" go test ./...
+TERN_TEST_CONN_STRING="host=/private/tmp database=tern_test" MIGRATE_TEST_CONN_STRING="host=/private/tmp database=tern_migrate_test" MIGRATE_TEST_DATABASE=tern_migrate_test go test ./...
 ```
 
 ## Prior Ruby Gem Version
