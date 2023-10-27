@@ -1104,7 +1104,9 @@ func LoadConfig() (*Config, error) {
 	}
 
 	if config.SSHConnConfig.Port == "" {
-		config.SSHConnConfig.Port = "ssh"
+		// Use SSH port by number instead of name because ":ssh" instead of ":22" doesn't work with the knownhosts package.
+		// It would return: ssh: handshake failed: knownhosts: key is unknown
+		config.SSHConnConfig.Port = "22"
 	}
 
 	if config.ConnConfig.RuntimeParams["application_name"] == "" {
