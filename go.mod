@@ -4,11 +4,11 @@ go 1.18
 
 require (
 	github.com/Masterminds/sprig/v3 v3.2.3
-	github.com/jackc/pgx/v5 v5.4.0
+	github.com/jackc/pgx/v5 v5.4.3
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.4
 	github.com/vaughan0/go-ini v0.0.0-20130923145212-a98ad7ee00ec
-	golang.org/x/crypto v0.10.0
+	golang.org/x/crypto v0.14.0
 )
 
 require (
@@ -27,7 +27,7 @@ require (
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/sys v0.9.0 // indirect
-	golang.org/x/text v0.10.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
