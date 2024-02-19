@@ -184,35 +184,40 @@ func TestMigrate(t *testing.T) {
 		expectedVersion   int32
 	}{
 		{[]string{"-d", "0"}, []string{}, []string{"t1", "t2"}, 0},
+		{[]string{"--dry-run"}, []string{}, []string{"t1", "t2"}, 0},
 		{[]string{}, []string{"t1", "t2"}, []string{}, 2},
 		{[]string{"-d", "1"}, []string{"t1"}, []string{"t2"}, 1},
 		{[]string{"-d", "-1"}, []string{}, []string{"t1", "t2"}, 0},
 		{[]string{"-d", "+1"}, []string{"t1"}, []string{"t2"}, 1},
 		{[]string{"-d", "+1"}, []string{"t1", "t2"}, []string{}, 2},
 		{[]string{"-d", "-+1"}, []string{"t1", "t2"}, []string{}, 2},
+		{[]string{"--dry-run"}, []string{}, []string{}, 2},
 	}
 
 	for i, tt := range tests {
-		baseArgs := []string{"migrate", "-m", "testdata", "-c", "testdata/tern.conf"}
-		args := append(baseArgs, tt.args...)
+		t.Run(fmt.Sprintf("args=%s", strings.Join(tt.args, " ")), func(t *testing.T) {
+			baseArgs := []string{"migrate", "-m", "testdata", "-c", "testdata/tern.conf"}
+			args := append(baseArgs, tt.args...)
 
-		tern(t, args...)
+			tern(t, args...)
 
-		for _, tableName := range tt.expectedExists {
-			if !tableExists(t, tableName) {
-				t.Fatalf("%d. Expected table %s to exist, but it doesn't", i, tableName)
+			for _, tableName := range tt.expectedExists {
+				if !tableExists(t, tableName) {
+					t.Fatalf("%d. Expected table %s to exist, but it doesn't", i, tableName)
+				}
 			}
-		}
 
-		for _, tableName := range tt.expectedNotExists {
-			if tableExists(t, tableName) {
-				t.Fatalf("%d. Expected table %s to not exist, but it does", i, tableName)
+			for _, tableName := range tt.expectedNotExists {
+				if tableExists(t, tableName) {
+					t.Fatalf("%d. Expected table %s to not exist, but it does", i, tableName)
+				}
 			}
-		}
 
-		if currentVersion(t) != tt.expectedVersion {
-			t.Fatalf(`Expected current version to be %d, but it was %d`, tt.expectedVersion, currentVersion(t))
-		}
+			if currentVersion(t) != tt.expectedVersion {
+				t.Fatalf(`Expected current version to be %d, but it was %d`, tt.expectedVersion, currentVersion(t))
+			}
+
+		})
 	}
 }
 

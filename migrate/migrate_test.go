@@ -233,6 +233,7 @@ func TestMigrateToLifeCycle(t *testing.T) {
 	var onStartCallUpCount int
 	var onStartCallDownCount int
 	m.OnStart = func(_ int32, _, direction, _ string) {
+		t.Log("OnStart", direction)
 		switch direction {
 		case "up":
 			onStartCallUpCount++

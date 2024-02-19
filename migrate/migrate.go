@@ -72,6 +72,8 @@ type Migration struct {
 type MigratorOptions struct {
 	// DisableTx causes the Migrator not to run migrations in a transaction.
 	DisableTx bool
+	// DryRunEnabled runs migrations without actually applying them to the database.
+	DryRunEnabled bool
 }
 
 type Migrator struct {
@@ -290,6 +292,14 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		}
 	}()
 
+	// if dry run is enabled, set various config values
+	if m.options.DryRunEnabled {
+		// set OnStart to output information as comment
+		m.OnStart = func(sequence int32, name, direction, sql string) {
+			fmt.Printf("-- file: %s number: %d - direction: %s\n", name, sequence, direction)
+		}
+	}
+
 	currentVersion, err := m.GetCurrentVersion(ctx)
 	if err != nil {
 		return err
@@ -360,12 +370,16 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 
 		// Execute the migration
 		for _, statement := range sqlStatements {
-			_, err = m.conn.Exec(ctx, statement)
-			if err != nil {
-				if err, ok := err.(*pgconn.PgError); ok {
-					return MigrationPgError{MigrationName: current.Name, Sql: statement, PgError: err}
+			if !m.options.DryRunEnabled {
+				_, err = m.conn.Exec(ctx, statement)
+				if err != nil {
+					if err, ok := err.(*pgconn.PgError); ok {
+						return MigrationPgError{MigrationName: current.Name, Sql: statement, PgError: err}
+					}
+					return err
 				}
-				return err
+			} else {
+				fmt.Printf("%s\n", statement)
 			}
 		}
 
@@ -373,11 +387,12 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		m.conn.Exec(ctx, "reset all")
 
 		// Add one to the version
-		_, err = m.conn.Exec(ctx, "update "+m.versionTable+" set version=$1", sequence)
-		if err != nil {
-			return err
+		if !m.options.DryRunEnabled {
+			_, err = m.conn.Exec(ctx, "update "+m.versionTable+" set version=$1", sequence)
+			if err != nil {
+				return err
+			}
 		}
-
 		if useTx {
 			err = tx.Commit(ctx)
 			if err != nil {
