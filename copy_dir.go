@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -13,7 +12,7 @@ func copyCodePackageDir(src, dst string) error {
 		return err
 	}
 
-	entries, err := ioutil.ReadDir(src)
+	entries, err := os.ReadDir(src)
 	if err != nil {
 		return err
 	}
@@ -27,12 +26,12 @@ func copyCodePackageDir(src, dst string) error {
 				return err
 			}
 		} else {
-			data, err := ioutil.ReadFile(srcPath)
+			data, err := os.ReadFile(srcPath)
 			if err != nil {
 				return err
 			}
 
-			err = ioutil.WriteFile(dstPath, data, e.Mode().Perm())
+			err = os.WriteFile(dstPath, data, e.Type().Perm())
 			if err != nil {
 				return err
 			}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 
@@ -51,7 +50,7 @@ func SSHAgent() ssh.AuthMethod {
 }
 
 func PrivateKey(path string) ssh.AuthMethod {
-	key, err := ioutil.ReadFile(path)
+	key, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}

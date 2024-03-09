@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -1027,7 +1026,7 @@ func findMigrationsForRenumber(path string) ([]string, error) {
 
 	path = strings.TrimRight(path, string(filepath.Separator))
 
-	fileInfos, err := ioutil.ReadDir(path)
+	fileInfos, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
@@ -1117,7 +1116,7 @@ func LoadConfig() (*Config, error) {
 }
 
 func appendConfigFromFile(config *Config, path string) error {
-	fileBytes, err := ioutil.ReadFile(path)
+	fileBytes, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
