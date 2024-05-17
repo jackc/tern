@@ -414,9 +414,11 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
-## 2.2.0 (Unreleased)
+## 2.2.0
 
 * Add gengen command
+* Upgrade dependencies
+* Fixes for SSH tunnel port
 
 ## 2.1.1 (June 17, 2023)
 
