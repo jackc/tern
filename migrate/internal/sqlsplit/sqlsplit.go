@@ -2,6 +2,7 @@ package sqlsplit
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -58,6 +59,12 @@ func rawState(l *sqlLexer) stateFn {
 			return singleQuoteState
 		case '"':
 			return doubleQuoteState
+		case '$':
+			tag, ok := readDollarTag(l.src[l.pos:])
+			if ok {
+				l.pos += len(tag) + 1 // tag + "$"
+				return dollarQuoteState(tag)
+			}
 		case ';':
 			l.addStatement(l.src[l.start:l.pos])
 			l.start = l.pos
@@ -124,6 +131,56 @@ func doubleQuoteState(l *sqlLexer) stateFn {
 				l.start = l.pos
 			}
 			return nil
+		}
+	}
+}
+
+func dollarQuoteState(openingTag string) func(l *sqlLexer) stateFn {
+	return func(l *sqlLexer) stateFn {
+		for {
+			r, width := utf8.DecodeRuneInString(l.src[l.pos:])
+			l.pos += width
+
+			switch r {
+			case '$':
+				tag, ok := readDollarTag(l.src[l.pos:])
+				if ok && tag == openingTag {
+					l.pos += len(tag) + 1 // tag + "$"
+					return rawState
+				}
+				l.pos += width
+			case utf8.RuneError:
+				if l.pos-l.start > 0 {
+					l.addStatement(l.src[l.start:l.pos])
+					l.start = l.pos
+				}
+				return nil
+			}
+		}
+	}
+}
+
+func readDollarTag(src string) (tag string, ok bool) {
+	nextRune, width := utf8.DecodeRuneInString(src)
+	if nextRune == '$' {
+		return "", true
+	}
+
+	if !unicode.IsLetter(nextRune) && nextRune != '_' {
+		// Not a valid identifier. Perhaps it's a positional parameter like $1.
+		return "", false
+	}
+
+	tagWidth := width
+	for {
+		nextRune, width := utf8.DecodeRuneInString(src[tagWidth:])
+		if nextRune == '$' {
+			return src[:tagWidth], true
+		} else if unicode.IsLetter(nextRune) || nextRune == '_' || ('0' <= nextRune && nextRune <= '9') {
+			tagWidth += width
+		} else {
+			// Unexpected rune or end of string. This is not a valid identifier, bail out.
+			return "", false
 		}
 	}
 }

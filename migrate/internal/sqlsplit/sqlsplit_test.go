@@ -64,6 +64,65 @@ from users
 where id = $1;`,
 				`select 1;`},
 		},
+		{
+			sql: `select 1;
+
+DO $$DECLARE r record;
+BEGIN
+   FOR r IN SELECT table_schema, table_name FROM information_schema.tables
+			WHERE table_type = 'VIEW' AND table_schema = 'public'
+   LOOP
+	   EXECUTE 'GRANT ALL ON ' || quote_ident(r.table_schema) || '.' || quote_ident(r.table_name) || ' TO webuser';
+   END LOOP;
+END$$;
+
+select 2;
+`,
+			expected: []string{`select 1;`,
+				`DO $$DECLARE r record;
+BEGIN
+   FOR r IN SELECT table_schema, table_name FROM information_schema.tables
+			WHERE table_type = 'VIEW' AND table_schema = 'public'
+   LOOP
+	   EXECUTE 'GRANT ALL ON ' || quote_ident(r.table_schema) || '.' || quote_ident(r.table_name) || ' TO webuser';
+   END LOOP;
+END$$;`,
+				`select 2;`},
+		},
+		{
+			sql: `select 1;
+SELECT $_testął123$hello; world$_testął123$;
+select 2;`,
+			expected: []string{`select 1;`,
+				`SELECT $_testął123$hello; world$_testął123$;`,
+				`select 2;`},
+		},
+		{
+			sql: `select 1;
+SELECT $test`,
+			expected: []string{`select 1;`,
+				`SELECT $test`},
+		},
+		{
+			sql: `select 1;
+SELECT $test$ending`,
+			expected: []string{`select 1;`,
+				`SELECT $test$ending`},
+		},
+		{
+			sql: `select 1;
+SELECT $test$ending$test`,
+			expected: []string{`select 1;`,
+				`SELECT $test$ending$test`},
+		},
+		{
+			sql: `select 1;
+SELECT $test$ (select $$nested$$ || $testing$strings;$testing$) $test$;
+select 2;`,
+			expected: []string{`select 1;`,
+				`SELECT $test$ (select $$nested$$ || $testing$strings;$testing$) $test$;`,
+				`select 2;`},
+		},
 	} {
 		actual := sqlsplit.Split(tt.sql)
 		assert.Equalf(t, tt.expected, actual, "%d", i)
