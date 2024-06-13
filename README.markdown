@@ -414,7 +414,7 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
-## 2.2.0
+## 2.2.0 (May 17, 2024)
 
 * Add gengen command
 * Upgrade dependencies
