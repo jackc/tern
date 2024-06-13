@@ -794,6 +794,12 @@ func SnapshotCode(cmd *cobra.Command, args []string) {
 	}
 
 	migrationsPath := cliOptions.migrationsPath
+
+	// If no migrations path was set in CLI argument look in environment.
+	if migrationsPath == "" {
+		migrationsPath = os.Getenv("TERN_MIGRATIONS")
+	}
+
 	migrations, err := migrate.FindMigrations(os.DirFS(migrationsPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading migrations:\n  %v\n", err)
