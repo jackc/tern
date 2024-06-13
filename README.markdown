@@ -414,6 +414,12 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.2.1 (June 13, 2024)
+
+* Fix: handle dollar-quoted strings when splitting SQL statements (Krzysztof Szafrański)
+* Fix: code snapshot command uses TERN_MIGRATIONS environment variable
+* Fix: code snapshot command sets file permissions properly
+
 ## 2.2.0 (May 17, 2024)
 
 * Add gengen command
