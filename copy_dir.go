@@ -31,7 +31,12 @@ func copyCodePackageDir(src, dst string) error {
 				return err
 			}
 
-			err = os.WriteFile(dstPath, data, e.Type().Perm())
+			fileInfo, err := os.Stat(srcPath)
+			if err != nil {
+				return err
+			}
+
+			err = os.WriteFile(dstPath, data, fileInfo.Mode().Perm())
 			if err != nil {
 				return err
 			}
