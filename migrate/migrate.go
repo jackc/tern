@@ -12,7 +12,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
+	"github.com/go-sprout/sprout"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/tern/v2/migrate/internal/sqlsplit"
@@ -146,7 +146,7 @@ func FindMigrations(fsys fs.FS) ([]string, error) {
 }
 
 func (m *Migrator) LoadMigrations(fsys fs.FS) error {
-	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap()).Funcs(
+	mainTmpl := template.New("main").Funcs(sprout.TxtFuncMap()).Funcs(
 		template.FuncMap{
 			"install_snapshot": func(name string) (string, error) {
 				codePackageFSys, err := fs.Sub(fsys, filepath.Join("snapshots", name))
