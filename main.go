@@ -19,7 +19,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/Masterminds/sprig/v3"
+	"github.com/go-sprout/sprout"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/tern/v2/migrate"
 	"github.com/spf13/cobra"
@@ -1127,7 +1127,7 @@ func appendConfigFromFile(config *Config, path string) error {
 		return err
 	}
 
-	confTemplate, err := template.New("conf").Funcs(sprig.TxtFuncMap()).Parse(string(fileBytes))
+	confTemplate, err := template.New("conf").Funcs(sprout.TxtFuncMap()).Parse(string(fileBytes))
 	if err != nil {
 		return err
 	}

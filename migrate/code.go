@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
+	"github.com/go-sprout/sprout"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -65,7 +65,7 @@ func findCodeFiles(fsys fs.FS) ([]string, error) {
 }
 
 func LoadCodePackage(fsys fs.FS) (*CodePackage, error) {
-	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap())
+	mainTmpl := template.New("main").Funcs(sprout.TxtFuncMap())
 	sqlPaths, err := findCodeFiles(fsys)
 	if err != nil {
 		return nil, err
@@ -129,5 +129,4 @@ func LockExecTx(ctx context.Context, conn *pgx.Conn, sql string) (err error) {
 	}
 
 	return tx.Commit(ctx)
-
 }
