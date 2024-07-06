@@ -31,7 +31,6 @@ dockers:
       - copy_dir.go
       - main.go
       - ssh_tunnel.go
-      - tern_tunnel.go
       - migrate
 
   - image_templates:
@@ -47,7 +46,6 @@ dockers:
       - copy_dir.go
       - main.go
       - ssh_tunnel.go
-      - tern_tunnel.go
       - migrate
 
 docker_manifests:
