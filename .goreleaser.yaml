@@ -1,3 +1,5 @@
+version: 2
+
 builds:
   - env:
       - CGO_ENABLED=0
@@ -22,6 +24,7 @@ dockers:
   build_flag_templates:
   - "--push"
   - "--platform=linux/amd64"
+
 - image_templates:
   - &arm_image 'ghcr.io/odyfey/tern:{{ .Tag }}-arm64'
   use: buildx
@@ -30,11 +33,21 @@ dockers:
   - "--platform=linux/arm64"
   goarch: arm64
 
+- extra_files:
+  - go.mod
+  - go.sum
+  - copy_dir.go
+  - main.go
+  - ssh_tunnel.go
+  - tern_tunnel.go
+  - migrate
+
 docker_manifests:
 - name_template: 'ghcr.io/odyfey/tern:{{ .Tag }}'
   image_templates:
     - *amd_image
     - *arm_image
+
 - name_template: 'ghcr.io/odyfey/tern:latest'
   image_templates:
     - *amd_image
