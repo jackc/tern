@@ -4,10 +4,15 @@ on:
   push:
     tags:
       - "v*"
+    paths:
+      - ".github/workflows/release.yaml"
 
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
     environment: build
     steps:
       - name: Checkout
@@ -24,9 +29,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Docker login
-        env:
-          GITHUB_REGISTRY_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: echo ${GITHUB_REGISTRY_TOKEN} | docker login ghcr.io -u odyfey --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u odyfey --password-stdin
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
