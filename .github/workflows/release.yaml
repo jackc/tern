@@ -8,6 +8,9 @@ on:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: write
     environment: build
     steps:
       - name: Checkout
@@ -15,10 +18,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Docker login
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u jackc --password-stdin
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
