@@ -115,6 +115,9 @@ In addition to program arguments, `TERN_CONFIG` and `TERN_MIGRATIONS`
 environment variables may be used to set the config path and migrations path
 respectively.
 
+In addition you would like to remove the checking of escape characters in your 
+tern migration scripts you can follow these pattern `{{"{{"}}` and `{"}}"}}`.
+
 ## Migrations
 
 To create a new migration:
