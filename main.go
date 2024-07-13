@@ -101,6 +101,7 @@ var cliOptions struct {
 	configPaths        []string
 	editNewMigration   bool
 	gengenOutputFile   string
+	dryRunEnabled      bool
 
 	connString   string
 	host         string
@@ -217,6 +218,7 @@ The word "last":
 		Run: Migrate,
 	}
 	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
+	cmdMigrate.Flags().BoolVarP(&cliOptions.dryRunEnabled, "dry-run", "", false, "run migrations without applying changes")
 	addConfigFlagsToCommand(cmdMigrate)
 
 	cmdCode := &cobra.Command{
@@ -510,7 +512,11 @@ func Migrate(cmd *cobra.Command, args []string) {
 	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
-	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
+	var migratorOpts = &migrate.MigratorOptions{}
+	if cliOptions.dryRunEnabled {
+		migratorOpts.DryRunEnabled = true
+	}
+	migrator, err := migrate.NewMigratorEx(ctx, conn, config.VersionTable, migratorOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
