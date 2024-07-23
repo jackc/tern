@@ -19,7 +19,7 @@ archives:
 
 dockers:
   - image_templates:
-    - &amd_image 'ghcr.io/jackc/tern:{{ .Tag }}-amd64'
+    - &amd_image 'ghcr.io/lemana-tech/tern:{{ .Tag }}-amd64'
     use: buildx
     build_flag_templates:
     - "--push"
@@ -34,7 +34,7 @@ dockers:
       - migrate
 
   - image_templates:
-    - &arm_image 'ghcr.io/jackc/tern:{{ .Tag }}-arm64'
+    - &arm_image 'ghcr.io/lemana-tech/tern:{{ .Tag }}-arm64'
     use: buildx
     build_flag_templates:
     - "--push"
@@ -49,12 +49,12 @@ dockers:
       - migrate
 
 docker_manifests:
-  - name_template: 'ghcr.io/jackc/tern:{{ .Tag }}'
+  - name_template: 'ghcr.io/lemana-tech/tern:{{ .Tag }}'
     image_templates:
       - *amd_image
       - *arm_image
 
-  - name_template: 'ghcr.io/jackc/tern:latest'
+  - name_template: 'ghcr.io/lemana-tech/tern:latest'
     image_templates:
       - *amd_image
       - *arm_image
