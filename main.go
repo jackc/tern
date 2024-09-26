@@ -88,8 +88,7 @@ var newMigrationText = `-- Write your migrate up statements here
 type Config struct {
 	ConnConfig    pgx.ConnConfig
 	ConnString    string
-	SslMode       string
-	SslRootCert   string
+	PGEnvvars     map[string]string
 	VersionTable  string
 	Data          map[string]interface{}
 	SSHConnConfig SSHConnConfig
@@ -127,13 +126,6 @@ func (c *Config) Validate() error {
 		return errors.New("Config must contain database but it does not")
 	}
 
-	switch c.SslMode {
-	case "", "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
-		// okay
-	default:
-		return errors.New("sslmode is invalid")
-	}
-
 	return nil
 }
 
@@ -149,31 +141,6 @@ func (c *Config) Connect(ctx context.Context) (*pgx.Conn, error) {
 		}
 	}
 
-	// If sslmode was set in config file or cli argument, set it in the
-	// environment so we can use pgx.ParseConfig to use pgx's built-in
-	// functionality.
-	switch c.SslMode {
-	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
-		if err := os.Setenv("PGPORT", strconv.Itoa(int(c.ConnConfig.Port))); err != nil {
-			return nil, err
-		}
-		if err := os.Setenv("PGHOST", c.ConnConfig.Host); err != nil {
-			return nil, err
-		}
-		if err := os.Setenv("PGSSLMODE", c.SslMode); err != nil {
-			return nil, err
-		}
-		if err := os.Setenv("PGSSLROOTCERT", c.SslRootCert); err != nil {
-			return nil, err
-		}
-
-		if cc, err := pgx.ParseConfig(""); err == nil {
-			c.ConnConfig.TLSConfig = cc.TLSConfig
-			c.ConnConfig.Fallbacks = cc.Fallbacks
-		} else {
-			return nil, err
-		}
-	}
 	return pgx.ConnectConfig(ctx, &c.ConnConfig)
 }
 
@@ -842,11 +809,11 @@ func PrintConnString(cmd *cobra.Command, args []string) {
 	connstring := config.ConnString
 	if connstring == "" {
 		options := ""
-		if ssl_mode := config.SslMode; ssl_mode != "" {
+		if ssl_mode := config.PGEnvvars["PGSSLMODE"]; ssl_mode != "" {
 			options += fmt.Sprintf("sslmode=%s&", ssl_mode)
 		}
-		if ssl_cert := config.SslRootCert; ssl_cert != "" {
-			options += fmt.Sprintf("sslcert=%s", ssl_cert)
+		if ssl_cert := config.PGEnvvars["PGSSLROOTCERT"]; ssl_cert != "" {
+			options += fmt.Sprintf("sslrootcert=%s", ssl_cert)
 		}
 		connstring = fmt.Sprintf(
 			"postgres://%s:%s@%s:%d/%s?%s",
@@ -1056,13 +1023,9 @@ func findMigrationsForRenumber(path string) ([]string, error) {
 
 func LoadConfig() (*Config, error) {
 	config := &Config{
+		PGEnvvars:    make(map[string]string),
 		VersionTable: "public.schema_version",
 		Data:         make(map[string]interface{}),
-	}
-	if connConfig, err := pgx.ParseConfig(""); err == nil {
-		config.ConnConfig = *connConfig
-	} else {
-		return nil, err
 	}
 	// If no config path was set in CLI argument look in environment.
 	if len(cliOptions.configPaths) == 0 {
@@ -1097,6 +1060,19 @@ func LoadConfig() (*Config, error) {
 
 	err := appendConfigFromCLIArgs(config)
 	if err != nil {
+		return nil, err
+	}
+
+	// Set PG* variables from CLI args and config before parsing conn string
+	for key, value := range config.PGEnvvars {
+		if err := os.Setenv(key, value); err != nil {
+			return nil, fmt.Errorf("error setting PostgreSQL environment variables from config: %s: %w", key, err)
+		}
+	}
+
+	if connConfig, err := pgx.ParseConfig(config.ConnString); err == nil {
+		config.ConnConfig = *connConfig
+	} else {
 		return nil, err
 	}
 
@@ -1145,41 +1121,39 @@ func appendConfigFromFile(config *Config, path string) error {
 
 	if connString, ok := file.Get("database", "conn_string"); ok {
 		config.ConnString = connString
-		if connConfig, err := pgx.ParseConfig(connString); err == nil {
-			config.ConnConfig = *connConfig
-		} else {
+		if _, err := pgx.ParseConfig(connString); err != nil {
 			return fmt.Errorf("error while parsing conn_string property: %w", err)
 		}
 	}
 
 	if host, ok := file.Get("database", "host"); ok {
-		config.ConnConfig.Host = host
+		config.PGEnvvars["PGHOST"] = host
 	}
 
 	// For backwards compatibility if host isn't set look for socket.
-	if config.ConnConfig.Host == "" {
+	if config.PGEnvvars["PGHOST"] == "" {
 		if socket, ok := file.Get("database", "socket"); ok {
-			config.ConnConfig.Host = socket
+			config.PGEnvvars["PGHOST"] = socket
 		}
 	}
 
 	if p, ok := file.Get("database", "port"); ok {
-		n, err := strconv.ParseUint(p, 10, 16)
+		_, err := strconv.ParseUint(p, 10, 16)
 		if err != nil {
 			return err
 		}
-		config.ConnConfig.Port = uint16(n)
+		config.PGEnvvars["PGPORT"] = p
 	}
 
 	if database, ok := file.Get("database", "database"); ok {
-		config.ConnConfig.Database = database
+		config.PGEnvvars["PGDATABASE"] = database
 	}
 
 	if user, ok := file.Get("database", "user"); ok {
-		config.ConnConfig.User = user
+		config.PGEnvvars["PGUSER"] = user
 	}
 	if password, ok := file.Get("database", "password"); ok {
-		config.ConnConfig.Password = password
+		config.PGEnvvars["PGPASSWORD"] = password
 	}
 
 	if vt, ok := file.Get("database", "version_table"); ok {
@@ -1187,11 +1161,11 @@ func appendConfigFromFile(config *Config, path string) error {
 	}
 
 	if sslmode, ok := file.Get("database", "sslmode"); ok {
-		config.SslMode = sslmode
+		config.PGEnvvars["PGSSLMODE"] = sslmode
 	}
 
 	if sslrootcert, ok := file.Get("database", "sslrootcert"); ok {
-		config.SslRootCert = sslrootcert
+		config.PGEnvvars["PGSSLROOTCERT"] = sslrootcert
 	}
 
 	for key, value := range file["data"] {
@@ -1218,33 +1192,32 @@ func appendConfigFromFile(config *Config, path string) error {
 
 func appendConfigFromCLIArgs(config *Config) error {
 	if cliOptions.connString != "" {
-		if connConfig, err := pgx.ParseConfig(cliOptions.connString); err == nil {
-			config.ConnConfig = *connConfig
-		} else {
+		config.ConnString = cliOptions.connString
+		if _, err := pgx.ParseConfig(cliOptions.connString); err != nil {
 			return fmt.Errorf("error while parsing conn-string argument: %w", err)
 		}
 	}
 
 	if cliOptions.host != "" {
-		config.ConnConfig.Host = cliOptions.host
+		config.PGEnvvars["PGHOST"] = cliOptions.host
 	}
 	if cliOptions.port != 0 {
-		config.ConnConfig.Port = cliOptions.port
+		config.PGEnvvars["PGPORT"] = strconv.FormatUint(uint64(cliOptions.port), 10)
 	}
 	if cliOptions.database != "" {
-		config.ConnConfig.Database = cliOptions.database
+		config.PGEnvvars["PGDATABASE"] = cliOptions.database
 	}
 	if cliOptions.user != "" {
-		config.ConnConfig.User = cliOptions.user
+		config.PGEnvvars["PGUSER"] = cliOptions.user
 	}
 	if cliOptions.password != "" {
-		config.ConnConfig.Password = cliOptions.password
+		config.PGEnvvars["PGPASSWORD"] = cliOptions.password
 	}
 	if cliOptions.sslmode != "" {
-		config.SslMode = cliOptions.sslmode
+		config.PGEnvvars["PGSSLMODE"] = cliOptions.sslmode
 	}
 	if cliOptions.sslrootcert != "" {
-		config.SslRootCert = cliOptions.sslrootcert
+		config.PGEnvvars["PGSSLROOTCERT"] = cliOptions.sslrootcert
 	}
 	if cliOptions.versionTable != "" {
 		config.VersionTable = cliOptions.versionTable
