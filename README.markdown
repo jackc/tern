@@ -414,6 +414,12 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.2.2 (September 29, 2024)
+
+* Fix: default sslmode=prefer behavior could cause fallback config confusion that could cause some connection settings to be ignored when not over ssl.
+* Update sprig dependency
+* Add docker images to goreleaser (odyfey)
+
 ## 2.2.1 (June 13, 2024)
 
 * Fix: handle dollar-quoted strings when splitting SQL statements (Krzysztof Szafrański)
