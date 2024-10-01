@@ -414,6 +414,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.2.3 (October 1, 2024)
+
+* Fix: version command for v2.2.2 was not updated and still outputted v2.2.1.
+
 ## 2.2.2 (September 29, 2024)
 
 * Fix: default sslmode=prefer behavior could cause fallback config confusion that could cause some connection settings to be ignored when not over ssl.
