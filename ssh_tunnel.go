@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 
-	"github.com/Microsoft/go-winio"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -17,11 +16,6 @@ type SSHConnConfig struct {
 	User     string
 	Password string
 }
-
-const (
-	// Windows does expostthe ssh agent on this pipe
-	sshAgentPipe = `\\.\pipe\openssh-ssh-agent`
-)
 
 func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 	sshConfig := &ssh.ClientConfig{
@@ -50,16 +44,6 @@ func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 	}
 
 	return ssh.Dial("tcp", net.JoinHostPort(config.Host, config.Port), sshConfig)
-}
-
-func WindowsSSHAgent() ssh.AuthMethod {
-
-	if sshAgent, err := winio.DialPipe(sshAgentPipe, nil); err == nil {
-		return ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers)
-	} else {
-		fmt.Printf("Error opening windows ssh agent: %v", err)
-	}
-	return nil
 }
 
 func SSHAgent() ssh.AuthMethod {
