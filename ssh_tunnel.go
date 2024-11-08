@@ -12,10 +12,12 @@ import (
 )
 
 type SSHConnConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
+	Host       string
+	Port       string
+	User       string
+	Password   string
+	KeyFile    string
+	Passphrase string
 }
 
 var sshKeyFiles = [...]string{
@@ -46,17 +48,23 @@ func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 		if hostKeyCallback, err := knownhosts.New(fmt.Sprintf("%s/.ssh/known_hosts", homeDir)); err == nil {
 			sshConfig.HostKeyCallback = hostKeyCallback
 		}
+	}
+
+	if config.KeyFile != "" {
+		if auth, err := PrivateKey(config.KeyFile, config.Passphrase); auth != nil {
+			sshConfig.Auth = append(sshConfig.Auth, auth)
+		} else if err != nil {
+			fmt.Printf("Can not read key file %q: %s\n", config.KeyFile, err)
+		}
+	}
+
+	if homeDir, err := os.UserHomeDir(); err == nil {
 		for _, f := range sshKeyFiles {
 			keyFile := fmt.Sprintf("%s/%s", homeDir, f)
-			if auth, err := PrivateKey(keyFile); auth != nil {
+			if auth, err := PrivateKey(keyFile, config.Passphrase); auth != nil {
 				sshConfig.Auth = append(sshConfig.Auth, auth)
 			} else if err != nil {
-				var pkErr *ssh.PassphraseMissingError
-				if errors.As(err, &pkErr) {
-					fmt.Printf("files encrypted with a passphrase are not supported (%q)\n", keyFile)
-				} else if !os.IsNotExist(err) {
-					fmt.Printf("error opening key file: %s", err)
-				}
+				fmt.Printf("Can not read key file %q: %s\n", keyFile, err)
 			}
 		}
 	}
@@ -71,12 +79,20 @@ func SSHAgent() ssh.AuthMethod {
 	return nil
 }
 
-func PrivateKey(path string) (ssh.AuthMethod, error) {
-	key, err := os.ReadFile(path)
+func PrivateKey(keyFile string, passphrase string) (ssh.AuthMethod, error) {
+	key, err := os.ReadFile(keyFile)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	signer, err := ssh.ParsePrivateKey(key)
+	var pkErr *ssh.PassphraseMissingError
+	if err != nil && errors.As(err, &pkErr) && passphrase != "" {
+		// If the key is encrypted and we have a passphrase, we try to parse it using the passphrase
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(passphrase))
+	}
 	if err != nil {
 		return nil, err
 	}
