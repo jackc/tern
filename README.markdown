@@ -95,6 +95,10 @@ password = {{env "MIGRATOR_PASSWORD"}}
 # user =
 # password is not required if using SSH agent authentication
 # password =
+# keyfile is the path to a SSH key file
+# keyfile = 
+# passphrase for the SSH key file given above or one of the default SSH key files in ~/.ssh
+# passphrase =
 
 [data]
 prefix = foo
@@ -353,7 +357,8 @@ your PostgreSQL server is `pg.example.com`, but you only have SSH access, then
 your SSH host would be pg.example.com and your database host would be
 `localhost`.
 
-Tern will automatically use an SSH agent or `~/.ssh/id_rsa` if available.
+Tern will automatically use an SSH agent or `~/.ssh/id_dsa`, `~/.ssh/id_rsa`, 
+`~/.ssh/ed25519` and`~/.ssh/id_ecdsa` if available.
 
 ## Embedding Tern
 
