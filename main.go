@@ -1191,6 +1191,14 @@ func appendConfigFromFile(config *Config, path string) error {
 	if password, ok := file.Get("ssh-tunnel", "password"); ok {
 		config.SSHConnConfig.Password = password
 	}
+
+	if keyfile, ok := file.Get("ssh-tunnel", "keyfile"); ok {
+		config.SSHConnConfig.KeyFile = keyfile
+	}
+
+	if passphrase, ok := file.Get("ssh-tunnel", "passphrase"); ok {
+		config.SSHConnConfig.Passphrase = passphrase
+	}
 	return nil
 }
 
