@@ -6,6 +6,7 @@ toolchain go1.21.13
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.9.0
@@ -17,6 +18,7 @@ require (
 	dario.cat/mergo v1.0.1 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
+	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
