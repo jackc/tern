@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -15,6 +16,13 @@ type SSHConnConfig struct {
 	Port     string
 	User     string
 	Password string
+}
+
+var sshKeyFiles = [...]string{
+	".ssh/id_dsa",
+	".ssh/id_rsa",
+	".ssh/id_ed25519",
+	".ssh/id_ecdsa",
 }
 
 func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
@@ -38,8 +46,18 @@ func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 		if hostKeyCallback, err := knownhosts.New(fmt.Sprintf("%s/.ssh/known_hosts", homeDir)); err == nil {
 			sshConfig.HostKeyCallback = hostKeyCallback
 		}
-		if auth := PrivateKey(fmt.Sprintf("%s/.ssh/id_rsa", homeDir)); auth != nil {
-			sshConfig.Auth = append(sshConfig.Auth, auth)
+		for _, f := range sshKeyFiles {
+			keyFile := fmt.Sprintf("%s/%s", homeDir, f)
+			if auth, err := PrivateKey(keyFile); auth != nil {
+				sshConfig.Auth = append(sshConfig.Auth, auth)
+			} else if err != nil {
+				var pkErr *ssh.PassphraseMissingError
+				if errors.As(err, &pkErr) {
+					fmt.Printf("files encrypted with a passphrase are not supported (%q)\n", keyFile)
+				} else if !os.IsNotExist(err) {
+					fmt.Printf("error opening key file: %s", err)
+				}
+			}
 		}
 	}
 
@@ -53,14 +71,14 @@ func SSHAgent() ssh.AuthMethod {
 	return nil
 }
 
-func PrivateKey(path string) ssh.AuthMethod {
+func PrivateKey(path string) (ssh.AuthMethod, error) {
 	key, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	signer, err := ssh.ParsePrivateKey(key)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return ssh.PublicKeys(signer)
+	return ssh.PublicKeys(signer), nil
 }
