@@ -103,6 +103,77 @@ func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opt
 	return
 }
 
+type MigrationStep struct {
+	Migration
+	SQL      string
+	Sequence interface{}
+}
+
+type MigrationPlan struct {
+	CurrentVersion int32
+	TargetVersion  int32
+	Direction      int32
+	DirectionName  string
+	Migrations     []*MigrationStep
+}
+
+func (m *Migrator) PlanMigrate(currentVersion, targetVersion int32) (*MigrationPlan, error) {
+
+	if targetVersion < 0 || int32(len(m.Migrations)) < targetVersion {
+		errMsg := fmt.Sprintf("destination version %d is outside the valid versions of 0 to %d", targetVersion, len(m.Migrations))
+		return nil, BadVersionError(errMsg)
+	}
+
+	var direction int32
+	var directionName string
+	if currentVersion < targetVersion {
+		direction = 1
+		directionName = "up"
+	} else {
+		direction = -1
+		directionName = "down"
+	}
+
+	plan := MigrationPlan{
+		CurrentVersion: currentVersion,
+		TargetVersion:  targetVersion,
+		Direction:      direction,
+		DirectionName:  directionName,
+	}
+
+	for currentVersion != targetVersion {
+		var current *Migration
+		var sql string
+		var sequence int32
+		if direction == 1 {
+			current = m.Migrations[currentVersion]
+			sequence = current.Sequence
+			sql = current.UpSQL
+
+		} else {
+			current = m.Migrations[currentVersion-1]
+			sequence = current.Sequence - 1
+			sql = current.DownSQL
+
+			if current.DownSQL == "" {
+				return nil, IrreversibleMigrationError{m: current}
+			}
+		}
+
+		plan.Migrations = append(plan.Migrations,
+			&MigrationStep{
+				Migration: *current,
+				SQL:       sql,
+				Sequence:  sequence,
+			})
+
+		currentVersion = currentVersion + direction
+	}
+
+	return &plan, nil
+
+}
+
 // FindMigrations finds all migration files in fsys.
 func FindMigrations(fsys fs.FS) ([]string, error) {
 	fileInfos, err := fs.ReadDir(fsys, ".")
