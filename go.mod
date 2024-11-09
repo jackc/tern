@@ -6,6 +6,7 @@ toolchain go1.21.13
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.9.0

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,10 +12,19 @@ import (
 )
 
 type SSHConnConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
+	Host       string
+	Port       string
+	User       string
+	Password   string
+	KeyFile    string
+	Passphrase string
+}
+
+var sshKeyFiles = [...]string{
+	".ssh/id_dsa",
+	".ssh/id_rsa",
+	".ssh/id_ed25519",
+	".ssh/id_ecdsa",
 }
 
 func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
@@ -26,6 +36,10 @@ func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 		sshConfig.Auth = append(sshConfig.Auth, auth)
 	}
 
+	if auth := WindowsSSHAgent(); auth != nil {
+		sshConfig.Auth = append(sshConfig.Auth, auth)
+	}
+
 	if config.Password != "" {
 		sshConfig.Auth = append(sshConfig.Auth, ssh.Password(config.Password))
 	}
@@ -34,8 +48,24 @@ func NewSSHClient(config *SSHConnConfig) (*ssh.Client, error) {
 		if hostKeyCallback, err := knownhosts.New(fmt.Sprintf("%s/.ssh/known_hosts", homeDir)); err == nil {
 			sshConfig.HostKeyCallback = hostKeyCallback
 		}
-		if auth := PrivateKey(fmt.Sprintf("%s/.ssh/id_rsa", homeDir)); auth != nil {
+	}
+
+	if config.KeyFile != "" {
+		if auth, err := PrivateKey(config.KeyFile, config.Passphrase); auth != nil {
 			sshConfig.Auth = append(sshConfig.Auth, auth)
+		} else if err != nil {
+			fmt.Printf("Can not read key file %q: %s\n", config.KeyFile, err)
+		}
+	}
+
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		for _, f := range sshKeyFiles {
+			keyFile := fmt.Sprintf("%s/%s", homeDir, f)
+			if auth, err := PrivateKey(keyFile, config.Passphrase); auth != nil {
+				sshConfig.Auth = append(sshConfig.Auth, auth)
+			} else if err != nil {
+				fmt.Printf("Can not read key file %q: %s\n", keyFile, err)
+			}
 		}
 	}
 
@@ -49,14 +79,22 @@ func SSHAgent() ssh.AuthMethod {
 	return nil
 }
 
-func PrivateKey(path string) ssh.AuthMethod {
-	key, err := os.ReadFile(path)
+func PrivateKey(keyFile string, passphrase string) (ssh.AuthMethod, error) {
+	key, err := os.ReadFile(keyFile)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil
+	var pkErr *ssh.PassphraseMissingError
+	if err != nil && errors.As(err, &pkErr) && passphrase != "" {
+		// If the key is encrypted and we have a passphrase, we try to parse it using the passphrase
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(passphrase))
 	}
-	return ssh.PublicKeys(signer)
+	if err != nil {
+		return nil, err
+	}
+	return ssh.PublicKeys(signer), nil
 }

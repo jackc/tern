@@ -111,10 +111,12 @@ var cliOptions struct {
 	sslrootcert  string
 	versionTable string
 
-	sshHost     string
-	sshPort     string
-	sshUser     string
-	sshPassword string
+	sshHost       string
+	sshPort       string
+	sshKeyFile    string
+	sshPassphrase string
+	sshUser       string
+	sshPassword   string
 }
 
 func (c *Config) Validate() error {
@@ -332,6 +334,8 @@ func addCoreConfigFlagsToCommand(cmd *cobra.Command) {
 
 	cmd.Flags().StringVarP(&cliOptions.sshHost, "ssh-host", "", "", "SSH tunnel host")
 	cmd.Flags().StringVarP(&cliOptions.sshPort, "ssh-port", "", "", "SSH tunnel port")
+	cmd.Flags().StringVarP(&cliOptions.sshKeyFile, "ssh-keyfile", "", "", "Path to SSH key file to use")
+	cmd.Flags().StringVarP(&cliOptions.sshPassphrase, "ssh-passphrase", "", "", "Passphrase for SSH key file (only required if file is encrpyted)")
 	cmd.Flags().StringVarP(&cliOptions.sshUser, "ssh-user", "", "", "SSH tunnel user (default is OS user")
 	cmd.Flags().StringVarP(&cliOptions.sshPassword, "ssh-password", "", "", "SSH tunnel password (unneeded if using SSH agent authentication)")
 }
@@ -1187,6 +1191,14 @@ func appendConfigFromFile(config *Config, path string) error {
 	if password, ok := file.Get("ssh-tunnel", "password"); ok {
 		config.SSHConnConfig.Password = password
 	}
+
+	if keyfile, ok := file.Get("ssh-tunnel", "keyfile"); ok {
+		config.SSHConnConfig.KeyFile = keyfile
+	}
+
+	if passphrase, ok := file.Get("ssh-tunnel", "passphrase"); ok {
+		config.SSHConnConfig.Passphrase = passphrase
+	}
 	return nil
 }
 
@@ -1234,6 +1246,12 @@ func appendConfigFromCLIArgs(config *Config) error {
 	}
 	if cliOptions.sshPassword != "" {
 		config.SSHConnConfig.Password = cliOptions.sshPassword
+	}
+	if cliOptions.sshKeyFile != "" {
+		config.SSHConnConfig.KeyFile = cliOptions.sshKeyFile
+	}
+	if cliOptions.sshPassphrase != "" {
+		config.SSHConnConfig.Passphrase = cliOptions.sshPassphrase
 	}
 
 	return nil
