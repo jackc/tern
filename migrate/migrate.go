@@ -163,7 +163,7 @@ func (m *Migrator) LoadMigrations(fsys fs.FS) error {
 		},
 	)
 
-	sharedPaths, err := fs.Glob(fsys, filepath.Join("*", "*.sql"))
+	sharedPaths, err := fs.Glob(fsys, "*/*.sql")
 	if err != nil {
 		return err
 	}
