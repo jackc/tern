@@ -149,7 +149,7 @@ func (m *Migrator) LoadMigrations(fsys fs.FS) error {
 	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap()).Funcs(
 		template.FuncMap{
 			"install_snapshot": func(name string) (string, error) {
-				codePackageFSys, err := fs.Sub(fsys, filepath.Join("snapshots", name))
+				codePackageFSys, err := fs.Sub(fsys, "snapshots/"+name)
 				if err != nil {
 					return "", err
 				}
