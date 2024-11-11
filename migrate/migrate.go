@@ -163,10 +163,15 @@ func (m *Migrator) LoadMigrations(fsys fs.FS) error {
 		},
 	)
 
-	sharedPaths, err := fs.Glob(fsys, "*/*.sql")
-	if err != nil {
-		return err
-	}
+	var sharedPaths []string
+	fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if (!d.IsDir()) &&
+			(filepath.Dir(path) != ".") &&
+			(filepath.Ext(path) == ".sql") {
+			sharedPaths = append(sharedPaths, path)
+		}
+		return nil
+	})
 
 	for _, p := range sharedPaths {
 		body, err := fs.ReadFile(fsys, p)
