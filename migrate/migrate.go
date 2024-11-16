@@ -149,7 +149,7 @@ func (m *Migrator) LoadMigrations(fsys fs.FS) error {
 	mainTmpl := template.New("main").Funcs(sprig.TxtFuncMap()).Funcs(
 		template.FuncMap{
 			"install_snapshot": func(name string) (string, error) {
-				codePackageFSys, err := fs.Sub(fsys, filepath.Join("snapshots", name))
+				codePackageFSys, err := fs.Sub(fsys, "snapshots/"+name)
 				if err != nil {
 					return "", err
 				}
@@ -163,10 +163,15 @@ func (m *Migrator) LoadMigrations(fsys fs.FS) error {
 		},
 	)
 
-	sharedPaths, err := fs.Glob(fsys, filepath.Join("*", "*.sql"))
-	if err != nil {
-		return err
-	}
+	var sharedPaths []string
+	fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if (!d.IsDir()) &&
+			(filepath.Dir(path) != ".") &&
+			(filepath.Ext(path) == ".sql") {
+			sharedPaths = append(sharedPaths, path)
+		}
+		return nil
+	})
 
 	for _, p := range sharedPaths {
 		body, err := fs.ReadFile(fsys, p)
