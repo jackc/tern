@@ -96,10 +96,11 @@ type Config struct {
 
 var cliOptions struct {
 	destinationVersion string
+	currentVersion     string
 	migrationsPath     string
 	configPaths        []string
 	editNewMigration   bool
-	gengenOutputFile   string
+	outputFile         string // used for gengen or print-migrations
 
 	connString   string
 	host         string
@@ -289,7 +290,31 @@ Migrations can only go forward to the latest version.
 	cmdGengen.Flags().StringSliceVarP(&cliOptions.configPaths, "config", "c", []string{}, "config path (default is ./tern.conf)")
 	cmdGengen.Flags().StringVarP(&cliOptions.versionTable, "version-table", "", "", "version table name (default is public.schema_version)")
 	cmdGengen.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
-	cmdGengen.Flags().StringVarP(&cliOptions.gengenOutputFile, "output", "o", "", "output file")
+	cmdGengen.Flags().StringVarP(&cliOptions.outputFile, "output", "o", "", "output file")
+
+	cmdPrintMigrations := &cobra.Command{
+		Use:   "print-migrations",
+		Short: "Print the migrations",
+		Long: `Print migrations
+
+This prints the migrations into a single file or to the console. 
+
+This can be useful if the SQL in the migrations is needed by other tools,
+such as programs for code generation (e.g., sqlc.dev) or tools for analyzing
+the DDL.
+
+Note that the generated SQL file is not intended to be executed directly
+against your database, as it does not update the version table nor does 
+it do any error handling 
+
+`,
+		Run: PrintMigrations,
+	}
+	addCoreConfigFlagsToCommand(cmdPrintMigrations)
+	cmdPrintMigrations.Flags().StringVarP(&cliOptions.currentVersion, "current", "", "0", "current version of the database (use from_db to read the current version form the database)")
+	cmdPrintMigrations.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
+	cmdPrintMigrations.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
+	cmdPrintMigrations.Flags().StringVarP(&cliOptions.outputFile, "output", "o", "", "output file")
 
 	cmdVersion := &cobra.Command{
 		Use:   "version",
@@ -315,6 +340,7 @@ Migrations can only go forward to the latest version.
 	rootCmd.AddCommand(cmdPrintConnString)
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdGengen)
+	rootCmd.AddCommand(cmdPrintMigrations)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
 }
@@ -655,11 +681,11 @@ order by version asc;
 `))
 
 	var out *os.File
-	if cliOptions.gengenOutputFile == "" {
+	if cliOptions.outputFile == "" {
 		out = os.Stdout
 	} else {
 		var err error
-		out, err = os.Create(cliOptions.gengenOutputFile)
+		out, err = os.Create(cliOptions.outputFile)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -1255,4 +1281,207 @@ func appendConfigFromCLIArgs(config *Config) error {
 	}
 
 	return nil
+}
+
+func PrintMigrations(cmd *cobra.Command, args []string) {
+
+	ctx := context.Background()
+
+	config, err := LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	err = config.Validate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid config:\n  %v\n", err)
+		os.Exit(1)
+	}
+	var migrator *migrate.Migrator
+	var currentVersion int32
+	if cliOptions.currentVersion == "from_db" {
+		// we need a db connection to get current version
+		conn, err := config.Connect(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error connecting to database:\n  %v\n", err)
+			os.Exit(1)
+		}
+		migrator, err = migrate.NewMigrator(ctx, conn, config.VersionTable)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
+			os.Exit(1)
+		}
+		currentVersion, err = migrator.GetCurrentVersion(ctx)
+	} else {
+		n, err := strconv.ParseInt(cliOptions.currentVersion, 10, 32)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Bad current version:\n  %v\n", err)
+			os.Exit(1)
+		}
+		currentVersion = int32(n)
+
+		migrator, err = migrate.NewMigrator(ctx, nil, config.VersionTable)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	migrator.Data = config.Data
+
+	err = migrator.LoadMigrations(os.DirFS(cliOptions.migrationsPath))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading migrations:\n %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(migrator.Migrations) == 0 {
+		fmt.Fprintln(os.Stderr, "No migrations found")
+		os.Exit(1)
+	}
+
+	maxDestination := int32(len(migrator.Migrations))
+	destination := mustParseDestination(cliOptions.destinationVersion, currentVersion, maxDestination)
+
+	plan, err := PlanMigration(migrator, currentVersion, destination)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error planning migrations:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	var out *os.File
+	if cliOptions.outputFile == "" {
+		out = os.Stdout
+	} else {
+		var err error
+		out, err = os.Create(cliOptions.outputFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		defer out.Close()
+	}
+
+	printMigrationsTemplate := template.Must(template.New("print-migrations").Parse(
+		`-- This file was generated by tern print-migrations v{{ .Version }}.
+-- Migrating {{ .Plan.DirectionName }} from {{ .Plan.CurrentVersion }} to {{ .Plan.TargetVersion}}
+
+{{range .Plan.Migrations -}}
+-- {{ .Name }}
+{{ if .SQL }}{{ .SQL }}{{ else }}-- empty migration{{ end }}
+
+{{end }}
+`))
+	err = printMigrationsTemplate.Execute(out, map[string]any{
+		"Version":      VERSION,
+		"VersionTable": config.VersionTable,
+		"Migrations":   plan.Migrations,
+		"Plan":         plan,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error generating migration script:", err)
+		os.Exit(1)
+	}
+}
+
+type MigrationStep struct {
+	migrate.Migration
+	SQL      string
+	Sequence interface{}
+}
+
+type MigrationPlan struct {
+	CurrentVersion int32
+	TargetVersion  int32
+	Direction      int32
+	DirectionName  string
+	Migrations     []*MigrationStep
+}
+
+func PlanMigration(migrator *migrate.Migrator, currentVersion, targetVersion int32) (*MigrationPlan, error) {
+	if targetVersion < 0 || int32(len(migrator.Migrations)) < targetVersion {
+		errMsg := fmt.Sprintf("destination version %d is outside the valid versions of 0 to %d", targetVersion, len(migrator.Migrations))
+		return nil, migrate.BadVersionError(errMsg)
+	}
+
+	if currentVersion < 0 || currentVersion > int32(len(migrator.Migrations)) {
+		errMsg := fmt.Sprintf("current version %d is outside the valid versions of 0 to %d", currentVersion, len(migrator.Migrations))
+		return nil, migrate.BadVersionError(errMsg)
+	}
+
+	var direction int32
+	var directionName string
+	if currentVersion < targetVersion {
+		direction = 1
+		directionName = "up"
+	} else {
+		direction = -1
+		directionName = "down"
+	}
+
+	plan := MigrationPlan{
+		CurrentVersion: currentVersion,
+		TargetVersion:  targetVersion,
+		Direction:      direction,
+		DirectionName:  directionName,
+	}
+
+	for currentVersion != targetVersion {
+		var current *migrate.Migration
+		var sql string
+		var sequence int32
+		if direction == 1 {
+			current = migrator.Migrations[currentVersion]
+			sequence = current.Sequence
+			sql = current.UpSQL
+
+		} else {
+			current = migrator.Migrations[currentVersion-1]
+			sequence = current.Sequence - 1
+			sql = current.DownSQL
+		}
+
+		plan.Migrations = append(plan.Migrations,
+			&MigrationStep{
+				Migration: *current,
+				SQL:       sql,
+				Sequence:  sequence,
+			})
+
+		currentVersion = currentVersion + direction
+	}
+
+	return &plan, nil
+}
+
+// mustParseDestination parses the destination argument and takes into account special syntax like
+//
+//   - 'last' (number of migration)
+//   - '+N'   (current version + N)
+//   - '-N'   (current version -N)
+//
+// calls os.Exit() on parse error
+func mustParseDestination(destinationArg string, currentVersion int32, maxDestination int32) int32 {
+	mustParseDestination := func(d string) int32 {
+		var n int64
+		n, err := strconv.ParseInt(d, 10, 32)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Bad destination:\n  %v\n", err)
+			os.Exit(1)
+		}
+		return int32(n)
+	}
+
+	var destination int32
+	if destinationArg == "last" {
+		destination = maxDestination
+	} else if len(destinationArg) >= 2 && destinationArg[0] == '-' {
+		destination = currentVersion - mustParseDestination(destinationArg[1:])
+	} else if len(destinationArg) >= 2 && destinationArg[0] == '+' {
+		destination = currentVersion + mustParseDestination(destinationArg[1:])
+	} else {
+		destination = mustParseDestination(destinationArg)
+	}
+	return destination
 }
