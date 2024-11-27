@@ -26,7 +26,7 @@ import (
 	ini "github.com/vaughan0/go-ini"
 )
 
-const VERSION = "2.2.3"
+const VERSION = "2.3.0"
 
 var defaultConf = `[database]
 # host is required (network host or path to Unix domain socket)
@@ -297,15 +297,15 @@ Migrations can only go forward to the latest version.
 		Short: "Print the migrations",
 		Long: `Print migrations
 
-This prints the migrations into a single file or to the console. 
+This prints the migrations into a single file or to the console.
 
 This can be useful if the SQL in the migrations is needed by other tools,
 such as programs for code generation (e.g., sqlc.dev) or tools for analyzing
 the DDL.
 
 Note that the generated SQL file is not intended to be executed directly
-against your database, as it does not update the version table nor does 
-it do any error handling 
+against your database, as it does not update the version table nor does
+it do any error handling
 
 `,
 		Run: PrintMigrations,

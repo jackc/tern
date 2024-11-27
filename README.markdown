@@ -96,7 +96,7 @@ password = {{env "MIGRATOR_PASSWORD"}}
 # password is not required if using SSH agent authentication
 # password =
 # keyfile is the path to a SSH key file
-# keyfile = 
+# keyfile =
 # passphrase for the SSH key file given above or one of the default SSH key files in ~/.ssh
 # passphrase =
 
@@ -357,7 +357,7 @@ your PostgreSQL server is `pg.example.com`, but you only have SSH access, then
 your SSH host would be pg.example.com and your database host would be
 `localhost`.
 
-Tern will automatically use an SSH agent or `~/.ssh/id_dsa`, `~/.ssh/id_rsa`, 
+Tern will automatically use an SSH agent or `~/.ssh/id_dsa`, `~/.ssh/id_rsa`,
 `~/.ssh/ed25519` and`~/.ssh/id_ecdsa` if available.
 
 ## Embedding Tern
@@ -418,6 +418,12 @@ Gem are incompatible with the version 1 release. However, that version of tern
 is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
+
+## 2.3.0 (November 27, 2024)
+
+* Add print-migrations command
+* Check more default SSH key locations
+* Windows fixes and improved Windows SSH support
 
 ## 2.2.3 (October 1, 2024)
 
