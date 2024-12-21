@@ -26,3 +26,4 @@ testdata/tern.conf
 /tmp
 
 .idea/*
+dist

@@ -5,17 +5,22 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
+      - windows
     goarch:
       - amd64
       - arm64
     main: ./
     ldflags:
-      - -s -w
+      - -s -w 
 
 archives:
-  - format: tar.gz
+  - id: linux
+    format: tar.gz
     files:
       - LICENSE
+    format_overrides:
+      - goos: windows
+        format: zip
 
 dockers:
   - image_templates:
@@ -32,6 +37,8 @@ dockers:
       - main.go
       - ssh_tunnel.go
       - migrate
+      - win_ssh_agent_other.go
+      - win_ssh_agent_windows.go
 
   - image_templates:
     - &arm_image 'ghcr.io/jackc/tern:{{ .Tag }}-arm64'
@@ -47,6 +54,7 @@ dockers:
       - main.go
       - ssh_tunnel.go
       - migrate
+      - win_ssh_agent_windows.go
 
 docker_manifests:
   - name_template: 'ghcr.io/jackc/tern:{{ .Tag }}'
