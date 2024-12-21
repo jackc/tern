@@ -419,6 +419,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.3.1 (December 21, 2024)
+
+* Upgrade vulnerable golang.org/x/crypto library
+
 ## 2.3.0 (November 27, 2024)
 
 * Add print-migrations command
