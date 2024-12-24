@@ -54,6 +54,7 @@ dockers:
       - main.go
       - ssh_tunnel.go
       - migrate
+      - win_ssh_agent_other.go      
       - win_ssh_agent_windows.go
 
 docker_manifests:
