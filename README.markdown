@@ -395,6 +395,17 @@ Limitations:
 disable-tx magic comment it will be ignored.
 * Migrations can only go forward to the latest version.
 
+## History table usage
+
+It is possible to log every migration applied (version, time it was applied, content of the migration, ...) using the 
+following configuration, in your tern.conf file:
+
+```
+# history_table = public.schema_history
+```
+
+This is an optional setting and you can plug it on the go, unplug it and plug it again if you want.
+
 ## Running the Tests
 
 To run the tests tern requires two test databases to run migrations against.

@@ -21,6 +21,7 @@ func TestLoadCodePackageNotCodePackage(t *testing.T) {
 	assert.EqualError(t, err, "install.sql not found")
 	assert.Nil(t, codePackage)
 }
+
 func TestInstallCodePackage(t *testing.T) {
 	codePackage, err := migrate.LoadCodePackage(os.DirFS("testdata/code"))
 	require.NoError(t, err)

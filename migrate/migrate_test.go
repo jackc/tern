@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,7 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var versionTable string = "schema_version_non_default"
+var (
+	versionTable string = "schema_version_non_default"
+	historyTable string = ""
+)
 
 func connectConn(t testing.TB) *pgx.Conn {
 	prepareDatabase(t)
@@ -70,7 +74,7 @@ func tableExists(t testing.TB, conn *pgx.Conn, tableName string) bool {
 
 func createEmptyMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 	var err error
-	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, historyTable)
 	assert.NoError(t, err)
 	return m
 }
@@ -88,7 +92,7 @@ func TestNewMigrator(t *testing.T) {
 	defer conn.Close(context.Background())
 
 	// Initial run
-	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, historyTable)
 	assert.NoError(t, err)
 
 	// Creates version table
@@ -96,7 +100,7 @@ func TestNewMigrator(t *testing.T) {
 	require.True(t, schemaVersionExists)
 
 	// Succeeds when version table is already created
-	m, err = migrate.NewMigrator(context.Background(), conn, versionTable)
+	m, err = migrate.NewMigrator(context.Background(), conn, versionTable, historyTable)
 	assert.NoError(t, err)
 
 	initialVersion, err := m.GetCurrentVersion(context.Background())
@@ -206,7 +210,7 @@ func TestLoadMigrationsNoForward(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
 
-	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, historyTable)
 	assert.NoError(t, err)
 
 	m.Data = map[string]interface{}{"prefix": "foo"}
@@ -348,7 +352,7 @@ func TestMigrateToDisableTxInTx(t *testing.T) {
 	tx, err := conn.Begin(ctx)
 	assert.NoError(t, err)
 
-	m, err := migrate.NewMigratorEx(ctx, conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	m, err := migrate.NewMigratorEx(ctx, conn, versionTable, historyTable, &migrate.MigratorOptions{DisableTx: true})
 	assert.NoError(t, err)
 	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
 	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
@@ -373,7 +377,7 @@ func TestMigrateToDisableTx(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
 
-	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, historyTable, &migrate.MigratorOptions{DisableTx: true})
 	assert.NoError(t, err)
 	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
 	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
@@ -401,7 +405,7 @@ func TestMigrateToDisableTxInMigration(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
 
-	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
+	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, historyTable, &migrate.MigratorOptions{})
 	assert.NoError(t, err)
 	m.AppendMigration(
 		"Create t1",
@@ -439,6 +443,73 @@ func TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(t *testing.T) {
 	require.EqualValues(t, 3, mCurrentVersion)
 }
 
+func TestFillHistoryTable(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, "history_table")
+	assert.NoError(t, err)
+	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
+	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
+	m.AppendMigration("Create t3", "create table t3(id serial);", "drop table t3;")
+
+	err = m.Migrate(context.Background())
+	assert.NoError(t, err)
+	currentVersion := currentVersion(t, conn)
+	require.EqualValues(t, 3, currentVersion)
+
+	var currentUser string
+	err = conn.QueryRow(context.Background(), "select current_user").Scan(&currentUser)
+	assert.NoError(t, err)
+	_, err = conn.Exec(context.Background(), fmt.Sprintf("create schema %s", currentUser))
+	assert.NoError(t, err)
+
+	m = createSampleMigrator(t, conn)
+	mCurrentVersion, err := m.GetCurrentVersion(context.Background())
+	assert.NoError(t, err)
+	require.EqualValues(t, 3, mCurrentVersion)
+
+	type historyRow struct {
+		Version   int32
+		AppliedAt time.Time
+		Name      string
+		Direction string
+		SQL       string
+	}
+
+	var historyRows []historyRow
+
+	rows, err := conn.Query(context.Background(), "select version, applied_at, name, direction, sql from history_table")
+	assert.NoError(t, err)
+	for rows.Next() {
+		var hr historyRow
+		err = rows.Scan(&hr.Version, &hr.AppliedAt, &hr.Name, &hr.Direction, &hr.SQL)
+		assert.NoError(t, err)
+		historyRows = append(historyRows, hr)
+	}
+	assert.Len(t, historyRows, 3)
+
+	assert.EqualValues(t, 1, historyRows[0].Version)
+	assert.EqualValues(t, 2, historyRows[1].Version)
+	assert.EqualValues(t, 3, historyRows[2].Version)
+
+	assert.WithinDuration(t, time.Now().UTC(), historyRows[0].AppliedAt, time.Second)
+	assert.WithinDuration(t, time.Now().UTC(), historyRows[1].AppliedAt, time.Second)
+	assert.WithinDuration(t, time.Now().UTC(), historyRows[2].AppliedAt, time.Second)
+
+	assert.Equal(t, "Create t1", historyRows[0].Name)
+	assert.Equal(t, "Create t2", historyRows[1].Name)
+	assert.Equal(t, "Create t3", historyRows[2].Name)
+
+	assert.Equal(t, "up", historyRows[0].Direction)
+	assert.Equal(t, "up", historyRows[1].Direction)
+	assert.Equal(t, "up", historyRows[2].Direction)
+
+	assert.Equal(t, "create table t1(id serial);", historyRows[0].SQL)
+	assert.Equal(t, "create table t2(id serial);", historyRows[1].SQL)
+	assert.Equal(t, "create table t3(id serial);", historyRows[2].SQL)
+}
+
 func Example_OnStartMigrationProgressLogging() {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("MIGRATE_TEST_CONN_STRING"))
 	if err != nil {
@@ -453,7 +524,7 @@ func Example_OnStartMigrationProgressLogging() {
 	}
 
 	var m *migrate.Migrator
-	m, err = migrate.NewMigrator(context.Background(), conn, "schema_version")
+	m, err = migrate.NewMigrator(context.Background(), conn, "schema_version", "")
 	if err != nil {
 		fmt.Printf("Unable to create migrator: %v", err)
 		return

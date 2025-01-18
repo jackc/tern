@@ -92,6 +92,7 @@ type Config struct {
 	VersionTable  string
 	Data          map[string]interface{}
 	SSHConnConfig SSHConnConfig
+	HistoryTable  string
 }
 
 var cliOptions struct {
@@ -507,7 +508,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
-	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
+	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable, config.HistoryTable)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -612,7 +613,7 @@ func Gengen(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	migrator, err := migrate.NewMigrator(context.Background(), nil, config.VersionTable)
+	migrator, err := migrate.NewMigrator(context.Background(), nil, config.VersionTable, config.HistoryTable)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -863,7 +864,7 @@ func Status(cmd *cobra.Command, args []string) {
 	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
-	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
+	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable, config.HistoryTable)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -1190,6 +1191,10 @@ func appendConfigFromFile(config *Config, path string) error {
 		config.VersionTable = vt
 	}
 
+	if ht, ok := file.Get("database", "history_table"); ok {
+		config.HistoryTable = ht
+	}
+
 	if sslmode, ok := file.Get("database", "sslmode"); ok {
 		config.PGEnvvars["PGSSLMODE"] = sslmode
 	}
@@ -1307,7 +1312,7 @@ func PrintMigrations(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error connecting to database:\n  %v\n", err)
 			os.Exit(1)
 		}
-		migrator, err = migrate.NewMigrator(ctx, conn, config.VersionTable)
+		migrator, err = migrate.NewMigrator(ctx, conn, config.VersionTable, config.HistoryTable)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 			os.Exit(1)
@@ -1321,7 +1326,7 @@ func PrintMigrations(cmd *cobra.Command, args []string) {
 		}
 		currentVersion = int32(n)
 
-		migrator, err = migrate.NewMigrator(ctx, nil, config.VersionTable)
+		migrator, err = migrate.NewMigrator(ctx, nil, config.VersionTable, config.HistoryTable)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 			os.Exit(1)

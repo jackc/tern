@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/jackc/pgx/v5"
@@ -77,6 +78,7 @@ type MigratorOptions struct {
 type Migrator struct {
 	conn         *pgx.Conn
 	versionTable string
+	historyTable string
 	options      *MigratorOptions
 	Migrations   []*Migration
 	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and SQL
@@ -84,13 +86,13 @@ type Migrator struct {
 }
 
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
-func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{})
+func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string, historyTable string) (m *Migrator, err error) {
+	return NewMigratorEx(ctx, conn, versionTable, historyTable, &MigratorOptions{})
 }
 
 // NewMigratorEx initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
-func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
-	m = &Migrator{conn: conn, versionTable: versionTable, options: opts}
+func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, historyTable string, opts *MigratorOptions) (m *Migrator, err error) {
+	m = &Migrator{conn: conn, versionTable: versionTable, options: opts, historyTable: historyTable}
 
 	// This is a bit of a kludge for the gengen command. A migrator without a conn is normally not allowed. However, the
 	// gengen command doesn't call any of the methods that require a conn. Potentially, we could refactor Migrator to
@@ -383,6 +385,21 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 			return err
 		}
 
+		if m.historyTable != "" {
+			if err := m.ensureHistoryTableExists(ctx); err != nil {
+				return fmt.Errorf("failed to check if history table exists: %w", err)
+			}
+
+			insertHistoryTableQuery := fmt.Sprintf(`
+				INSERT INTO %s (version, applied_at, name, direction, sql) VALUES ($1, $2, $3, $4, $5);
+			`, m.historyTable)
+
+			_, err = m.conn.Exec(ctx, insertHistoryTableQuery, fmt.Sprintf("%d", sequence), time.Now().UTC(), current.Name, directionName, sql)
+			if err != nil {
+				return fmt.Errorf("failed to fill history table: %w", err)
+			}
+		}
+
 		if useTx {
 			err = tx.Commit(ctx)
 			if err != nil {
@@ -399,6 +416,38 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 func (m *Migrator) GetCurrentVersion(ctx context.Context) (v int32, err error) {
 	err = m.conn.QueryRow(ctx, "select version from "+m.versionTable).Scan(&v)
 	return v, err
+}
+
+func (m *Migrator) ensureHistoryTableExists(ctx context.Context) (err error) {
+	err = acquireAdvisoryLock(ctx, m.conn)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if unlockErr := releaseAdvisoryLock(ctx, m.conn); err == nil && unlockErr != nil {
+			err = unlockErr
+		}
+	}()
+
+	if ok, err := m.historyTableExists(ctx); err != nil || ok {
+		return err
+	}
+
+	createTableQuery := fmt.Sprintf(`
+		create table if not exists %s(
+		    version int not null,
+		    applied_at timestamp with time zone not null,
+		    name text not null,
+		    direction text not null,
+		    sql text not null
+		);
+	`, m.historyTable)
+
+	if _, err := m.conn.Exec(ctx, createTableQuery); err != nil {
+		return fmt.Errorf("failed to create history table: %w", err)
+	}
+
+	return err
 }
 
 func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err error) {
@@ -433,6 +482,17 @@ func (m *Migrator) versionTableExists(ctx context.Context) (ok bool, err error) 
 		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_class where relname=$1 and relkind='r' and pg_table_is_visible(oid)", m.versionTable).Scan(&count)
 	} else {
 		schema, table := m.versionTable[:i], m.versionTable[i+1:]
+		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_tables where schemaname=$1 and tablename=$2", schema, table).Scan(&count)
+	}
+	return count > 0, err
+}
+
+func (m *Migrator) historyTableExists(ctx context.Context) (ok bool, err error) {
+	var count int
+	if i := strings.IndexByte(m.historyTable, '.'); i == -1 {
+		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_class where relname=$1 and relkind='r' and pg_table_is_visible(oid)", m.historyTable).Scan(&count)
+	} else {
+		schema, table := m.historyTable[:i], m.historyTable[i+1:]
 		err = m.conn.QueryRow(ctx, "select count(*) from pg_catalog.pg_tables where schemaname=$1 and tablename=$2", schema, table).Scan(&count)
 	}
 	return count > 0, err
