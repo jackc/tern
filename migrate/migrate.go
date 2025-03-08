@@ -15,7 +15,6 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/tern/v2/migrate/internal/sqlsplit"
 )
 
 var (
@@ -32,11 +31,11 @@ func (e BadVersionError) Error() string {
 }
 
 type IrreversibleMigrationError struct {
-	m *Migration
+	m MigrationStep
 }
 
 func (e IrreversibleMigrationError) Error() string {
-	return fmt.Sprintf("Irreversible migration: %d - %s", e.m.Sequence, e.m.Name)
+	return fmt.Sprintf("Irreversible migration: %d - %s", e.m.Sequence(), e.m.Name())
 }
 
 type NoMigrationsFoundError struct{}
@@ -62,6 +61,7 @@ func (e MigrationPgError) Unwrap() error {
 	return e.PgError
 }
 
+// Deprecated: use [SQLStep] or [FuncStep].
 type Migration struct {
 	Sequence int32
 	Name     string
@@ -78,9 +78,12 @@ type Migrator struct {
 	conn         *pgx.Conn
 	versionTable string
 	options      *MigratorOptions
-	Migrations   []*Migration
-	OnStart      func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and SQL
-	Data         map[string]interface{}              // Data available to use in migrations
+	// Deprecated: use [Migrator.Steps].
+	Migrations []*Migration
+	// Steps are the migration state transitions that the [Migrator] is set up to perform.
+	Steps   []MigrationStep
+	OnStart func(int32, string, string, string) // OnStart is called when a migration is run with the sequence, name, direction, and SQL
+	Data    map[string]interface{}              // Data available to use in migrations
 }
 
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
@@ -251,6 +254,7 @@ func (m *Migrator) evalMigration(tmpl *template.Template, sql string) (string, e
 	return buf.String(), nil
 }
 
+// Deprecated: use [Migrator.AppendSteps].
 func (m *Migrator) AppendMigration(name, upSQL, downSQL string) {
 	m.Migrations = append(
 		m.Migrations,
@@ -263,10 +267,23 @@ func (m *Migrator) AppendMigration(name, upSQL, downSQL string) {
 	return
 }
 
-// Migrate runs pending migrations
+// AppendSteps adds [MigrationStep] instances to the [Migrator].
+func (m *Migrator) AppendSteps(steps ...MigrationStep) {
+	m.Steps = append(m.Steps, steps...)
+}
+
+// Migrate runs all pending migrations.
 // It calls m.OnStart when it begins a migration
 func (m *Migrator) Migrate(ctx context.Context) error {
-	return m.MigrateTo(ctx, int32(len(m.Migrations)))
+	return m.MigrateTo(ctx, m.highestSequenceNum())
+}
+
+// validate returns an error if the [Migrator] is set up in an incoherent way.
+func (m *Migrator) validate() error {
+	if len(m.Migrations) > 0 && len(m.Steps) > 0 {
+		return fmt.Errorf("must define either Migrations or Steps, not both")
+	}
+	return nil
 }
 
 // Lock to ensure multiple migrations cannot occur simultaneously
@@ -284,6 +301,11 @@ func releaseAdvisoryLock(ctx context.Context, conn *pgx.Conn) error {
 
 // MigrateTo migrates to targetVersion
 func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err error) {
+	if err := m.validate(); err != nil {
+		return err
+	}
+	steps := m.listMigrationSteps()
+
 	err = acquireAdvisoryLock(ctx, m.conn)
 	if err != nil {
 		return err
@@ -300,13 +322,13 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		return err
 	}
 
-	if targetVersion < 0 || int32(len(m.Migrations)) < targetVersion {
-		errMsg := fmt.Sprintf("destination version %d is outside the valid versions of 0 to %d", targetVersion, len(m.Migrations))
+	if targetVersion < 0 || int32(len(steps)) < targetVersion {
+		errMsg := fmt.Sprintf("destination version %d is outside the valid versions of 0 to %d", targetVersion, len(steps))
 		return BadVersionError(errMsg)
 	}
 
-	if currentVersion < 0 || int32(len(m.Migrations)) < currentVersion {
-		errMsg := fmt.Sprintf("current version %d is outside the valid versions of 0 to %d", currentVersion, len(m.Migrations))
+	if currentVersion < 0 || int32(len(steps)) < currentVersion {
+		errMsg := fmt.Sprintf("current version %d is outside the valid versions of 0 to %d", currentVersion, len(steps))
 		return BadVersionError(errMsg)
 	}
 
@@ -318,60 +340,39 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 	}
 
 	for currentVersion != targetVersion {
-		var current *Migration
-		var sql, directionName string
+		var current MigrationStep
+		var directionName string
 		var sequence int32
+		var migrationFunc func(context.Context, *pgx.Conn) error
 		if direction == 1 {
-			current = m.Migrations[currentVersion]
-			sequence = current.Sequence
-			sql = current.UpSQL
+			current = steps[currentVersion]
+			sequence = current.Sequence()
 			directionName = "up"
+			migrationFunc = current.Up
 		} else {
-			current = m.Migrations[currentVersion-1]
-			sequence = current.Sequence - 1
-			sql = current.DownSQL
+			current = steps[currentVersion-1]
+			sequence = current.Sequence() - 1
 			directionName = "down"
-			if current.DownSQL == "" {
-				return IrreversibleMigrationError{m: current}
-			}
+			migrationFunc = current.Down
 		}
 
-		useTx := !m.options.DisableTx
-		var sqlStatements []string
-		if disableTxPattern.MatchString(sql) {
-			useTx = false
-			sql = disableTxPattern.ReplaceAllLiteralString(sql, "")
+		// Fire on start callback for an SQL step.
+		if sqlStep := asSQLStep(current); sqlStep != nil && m.OnStart != nil {
+			m.OnStart(sequence, current.Name(), directionName, getSQL(sqlStep, directionName))
 		}
 
-		if useTx {
-			sqlStatements = []string{sql}
-		} else {
-			sqlStatements = sqlsplit.Split(sql)
-		}
-
+		useTx := !m.options.DisableTx && !current.DisableTx()
 		var tx pgx.Tx
 		if useTx {
-			tx, err = m.conn.Begin(ctx)
-			if err != nil {
+			if tx, err = m.conn.Begin(ctx); err != nil {
 				return err
 			}
 			defer tx.Rollback(ctx)
 		}
 
-		// Fire on start callback
-		if m.OnStart != nil {
-			m.OnStart(current.Sequence, current.Name, directionName, sql)
-		}
-
 		// Execute the migration
-		for _, statement := range sqlStatements {
-			_, err = m.conn.Exec(ctx, statement)
-			if err != nil {
-				if err, ok := err.(*pgconn.PgError); ok {
-					return MigrationPgError{MigrationName: current.Name, Sql: statement, PgError: err}
-				}
-				return err
-			}
+		if err := migrationFunc(ctx, m.conn); err != nil {
+			return err
 		}
 
 		// Reset all database connection settings. Important to do before updating version as search_path may have been changed.
@@ -384,8 +385,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		}
 
 		if useTx {
-			err = tx.Commit(ctx)
-			if err != nil {
+			if err := tx.Commit(ctx); err != nil {
 				return err
 			}
 		}
@@ -438,6 +438,35 @@ func (m *Migrator) versionTableExists(ctx context.Context) (ok bool, err error) 
 	return count > 0, err
 }
 
+// listMigrationSteps returns an ordered list of [MigrationStep] that the [Migrator] is set up to
+// perform. In case the [Migrator] was set up to use a list of [Migration] instances, those are
+// converted to a [MigrationStep] list.
+func (m *Migrator) listMigrationSteps() []MigrationStep {
+	if len(m.Migrations) == 0 {
+		return m.Steps
+	}
+	steps := make([]MigrationStep, 0, len(m.Migrations))
+	for _, it := range m.Migrations {
+		steps = append(steps,
+			SQLStep(SQL{
+				Sequence: it.Sequence,
+				Name:     it.Name,
+				UpSQL:    it.UpSQL,
+				DownSQL:  it.DownSQL,
+			}))
+	}
+	return steps
+}
+
+// highestSequenceNum returns the highest sequence number of any [MigrationStep] handled by the
+// [Migrator].
+func (m *Migrator) highestSequenceNum() int32 {
+	if len(m.Migrations) > 0 {
+		return m.Migrations[len(m.Migrations)-1].Sequence
+	}
+	return m.Steps[len(m.Steps)-1].Sequence()
+}
+
 func setAt(strs []string, value string, pos int64) []string {
 	// If pos > length - 1, append empty strings to make it the right size
 	if pos > int64(len(strs))-1 {
@@ -445,4 +474,22 @@ func setAt(strs []string, value string, pos int64) []string {
 	}
 	strs[pos] = value
 	return strs
+}
+
+// asSQLStep casts a [MigrationStep] to an [SQLMigrationStep]. If s is not an [SQLMigrationStep] nil
+// is returned.
+func asSQLStep(s MigrationStep) SQLMigrationStep {
+	sqlMigration, ok := s.(SQLMigrationStep)
+	if ok {
+		return sqlMigration
+	}
+	return nil
+}
+
+// getSQL returns the SQL statement of an [SQLMigrationStep] for a given direction ("up" or "down").
+func getSQL(s SQLMigrationStep, direction string) string {
+	if direction == "up" {
+		return s.UpSQL()
+	}
+	return s.DownSQL()
 }
