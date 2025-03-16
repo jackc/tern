@@ -326,10 +326,6 @@ func (m *Migrator) Migrate(ctx context.Context) error {
 
 // validate returns an error if the [Migrator] is set up in an incoherent way.
 func (m *Migrator) validate() error {
-	if len(m.Migrations) == 0 {
-		return fmt.Errorf("cannot migrate an empty sequence of migrations")
-	}
-
 	for _, m := range m.Migrations {
 		if m.UpSQL != "" && m.UpFunc != nil {
 			return fmt.Errorf("cannot specify both UpSQL and UpFunc for a migration")
