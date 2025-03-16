@@ -439,7 +439,7 @@ func TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(t *testing.T) {
 	require.EqualValues(t, 3, mCurrentVersion)
 }
 
-func Example_OnStartMigrationProgressLogging() {
+func Example_onStartMigrationProgressLogging() {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("MIGRATE_TEST_CONN_STRING"))
 	if err != nil {
 		fmt.Printf("Unable to establish connection: %v", err)

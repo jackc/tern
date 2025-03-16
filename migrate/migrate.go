@@ -23,6 +23,11 @@ var (
 	disableTxPattern = regexp.MustCompile(`(?m)^---- tern: disable-tx ----$`)
 )
 
+const (
+	up   = "up"
+	down = "down"
+)
+
 var ErrNoFwMigration = errors.New("no sql in forward migration step")
 
 type BadVersionError string
@@ -62,11 +67,58 @@ func (e MigrationPgError) Unwrap() error {
 	return e.PgError
 }
 
+// MigrationFunc can be used to define a [Migration] using a Go function.
+type MigrationFunc func(ctx context.Context, conn *pgx.Conn) error
+
+// A Migration is a database schema state transition. It performs the modifications needed to bring
+// the database schema up from its prior state to the new state (and optionally back down again).
 type Migration struct {
+	// Sequence is a state identifier for the database schema after the up direction of the
+	// [Migration] has been applied.
 	Sequence int32
-	Name     string
-	UpSQL    string
-	DownSQL  string
+	// Name is a human-readable name or description of the [Migration].
+	Name string
+
+	// UpSQL declares SQL statements that brings the database up from its prior [Migration]
+	// state. Cannot be used together with [UpFunc].
+	UpSQL string
+	// DownSQL declares SQL statements that brings the database back down to its prior
+	// [Migration] state. Cannot be used together with [DownFunc].
+	DownSQL string
+
+	// UpFunc is a Go function that brings the database up from its prior state [Migration]
+	// state. Cannot be used together with [UpSQL].
+	UpFunc MigrationFunc
+	// DownFunc is a Go function that brings the database back down to its prior [Migration]
+	// state. Cannot be used together with [DownSQL].
+	DownFunc MigrationFunc
+}
+
+// isSQL returns true if the [Migration] is an SQL-based one in the given direction ([up] or
+// [down]). That is, one defined in terms of [Migration.UpSQL] or [Migration.DownSQL].
+func (m *Migration) isSQL(direction string) bool {
+	if direction == up {
+		return m.UpSQL != ""
+	}
+	return m.DownSQL != ""
+}
+
+// wantTx returns true if the [Migration] wants to run in a transaction. The direction can either be
+// [up] or [down].
+func (m *Migration) wantTx(direction string) bool {
+	if !m.isSQL(direction) {
+		// We always want a transaction for function-based transactions.
+		return true
+	}
+	if direction == up {
+		return !disableTxPattern.MatchString(m.UpSQL)
+	}
+	return !disableTxPattern.MatchString(m.DownSQL)
+}
+
+// irreversible returns true if the [Migration] cannot be undone.
+func (m *Migration) irreversible() bool {
+	return m.DownSQL == "" && m.DownFunc == nil
 }
 
 type MigratorOptions struct {
@@ -266,7 +318,30 @@ func (m *Migrator) AppendMigration(name, upSQL, downSQL string) {
 // Migrate runs pending migrations
 // It calls m.OnStart when it begins a migration
 func (m *Migrator) Migrate(ctx context.Context) error {
-	return m.MigrateTo(ctx, int32(len(m.Migrations)))
+	if err := m.validate(); err != nil {
+		return err
+	}
+	return m.MigrateTo(ctx, m.highestSequenceNum())
+}
+
+// validate returns an error if the [Migrator] is set up in an incoherent way.
+func (m *Migrator) validate() error {
+	if len(m.Migrations) == 0 {
+		return fmt.Errorf("cannot migrate an empty sequence of migrations")
+	}
+
+	for _, m := range m.Migrations {
+		if m.UpSQL != "" && m.UpFunc != nil {
+			return fmt.Errorf("cannot specify both UpSQL and UpFunc for a migration")
+		}
+		if m.UpSQL == "" && m.UpFunc == nil {
+			return fmt.Errorf("must specify either UpSQL or UpFunc for a migration")
+		}
+		if m.DownSQL != "" && m.DownFunc != nil {
+			return fmt.Errorf("cannot specify both DownSQL and DownFunc for a migration")
+		}
+	}
+	return nil
 }
 
 // Lock to ensure multiple migrations cannot occur simultaneously
@@ -284,6 +359,10 @@ func releaseAdvisoryLock(ctx context.Context, conn *pgx.Conn) error {
 
 // MigrateTo migrates to targetVersion
 func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err error) {
+	if err := m.validate(); err != nil {
+		return err
+	}
+
 	err = acquireAdvisoryLock(ctx, m.conn)
 	if err != nil {
 		return err
@@ -311,42 +390,41 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 	}
 
 	var direction int32
+	var directionName string
 	if currentVersion < targetVersion {
 		direction = 1
+		directionName = up
 	} else {
 		direction = -1
+		directionName = down
 	}
 
 	for currentVersion != targetVersion {
 		var current *Migration
-		var sql, directionName string
+		var sql string
 		var sequence int32
+		var migrateFunc MigrationFunc // Will do the migration step.
 		if direction == 1 {
 			current = m.Migrations[currentVersion]
 			sequence = current.Sequence
 			sql = current.UpSQL
-			directionName = "up"
+			if !current.isSQL(directionName) {
+				migrateFunc = current.UpFunc
+			}
 		} else {
 			current = m.Migrations[currentVersion-1]
-			sequence = current.Sequence - 1
-			sql = current.DownSQL
-			directionName = "down"
-			if current.DownSQL == "" {
+			if current.irreversible() {
 				return IrreversibleMigrationError{m: current}
 			}
+			sequence = current.Sequence - 1
+			sql = current.DownSQL
+			if !current.isSQL(directionName) {
+				migrateFunc = current.DownFunc
+			}
 		}
-
-		useTx := !m.options.DisableTx
-		var sqlStatements []string
-		if disableTxPattern.MatchString(sql) {
-			useTx = false
-			sql = disableTxPattern.ReplaceAllLiteralString(sql, "")
-		}
-
-		if useTx {
-			sqlStatements = []string{sql}
-		} else {
-			sqlStatements = sqlsplit.Split(sql)
+		useTx := !m.options.DisableTx && current.wantTx(directionName)
+		if current.isSQL(directionName) {
+			migrateFunc = sqlFunc(current, directionName, useTx)
 		}
 
 		var tx pgx.Tx
@@ -363,15 +441,9 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 			m.OnStart(current.Sequence, current.Name, directionName, sql)
 		}
 
-		// Execute the migration
-		for _, statement := range sqlStatements {
-			_, err = m.conn.Exec(ctx, statement)
-			if err != nil {
-				if err, ok := err.(*pgconn.PgError); ok {
-					return MigrationPgError{MigrationName: current.Name, Sql: statement, PgError: err}
-				}
-				return err
-			}
+		// Execute the migration.
+		if err := migrateFunc(ctx, m.conn); err != nil {
+			return err
 		}
 
 		// Reset all database connection settings. Important to do before updating version as search_path may have been changed.
@@ -438,6 +510,12 @@ func (m *Migrator) versionTableExists(ctx context.Context) (ok bool, err error) 
 	return count > 0, err
 }
 
+// highestSequenceNum returns the highest sequence number of any [Migration] handled by the
+// [Migrator].
+func (m *Migrator) highestSequenceNum() int32 {
+	return m.Migrations[len(m.Migrations)-1].Sequence
+}
+
 func setAt(strs []string, value string, pos int64) []string {
 	// If pos > length - 1, append empty strings to make it the right size
 	if pos > int64(len(strs))-1 {
@@ -445,4 +523,29 @@ func setAt(strs []string, value string, pos int64) []string {
 	}
 	strs[pos] = value
 	return strs
+}
+
+// sqlFunc creates a [MigrationFunc] for the supplied SQL-based [Migration] in the given direction
+// ([up] or [down]).
+func sqlFunc(m *Migration, directionName string, useTx bool) MigrationFunc {
+	sql := m.UpSQL
+	if directionName == down {
+		sql = m.DownSQL
+	}
+	return func(ctx context.Context, conn *pgx.Conn) error {
+		sqlStatements := []string{sql}
+		if !useTx {
+			sqlStatements = sqlsplit.Split(sql)
+		}
+		// Execute the migration
+		for _, statement := range sqlStatements {
+			if _, err := conn.Exec(ctx, statement); err != nil {
+				if err, ok := err.(*pgconn.PgError); ok {
+					return MigrationPgError{MigrationName: m.Name, Sql: statement, PgError: err}
+				}
+				return err
+			}
+		}
+		return nil
+	}
 }
