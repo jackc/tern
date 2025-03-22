@@ -380,7 +380,7 @@ The sample code below shows how a `migrate.Migrator` can be set up to perform mi
 		{
 			Sequence: 1,
 			Name:     "1",
-			UpFunc: func(ctx context.Context, conn pgx.Tx) error {
+			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
 				_, err := tx.Exec(ctx, "CREATE TABLE tmp (id INT);")
 				return err
 			},
