@@ -89,36 +89,36 @@ func createGoFuncMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 		{
 			Sequence: 1,
 			Name:     "Create t1",
-			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
-				_, err := conn.Exec(ctx, "create table t1(id serial);")
+			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "create table t1(id serial);")
 				return err
 			},
-			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
-				_, err := conn.Exec(ctx, "drop table t1;")
+			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "drop table t1;")
 				return err
 			},
 		},
 		{
 			Sequence: 2,
 			Name:     "Create t2",
-			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
-				_, err := conn.Exec(ctx, "create table t2(id serial);")
+			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "create table t2(id serial);")
 				return err
 			},
-			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
-				_, err := conn.Exec(ctx, "drop table t2;")
+			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "drop table t2;")
 				return err
 			},
 		},
 		{
 			Sequence: 3,
 			Name:     "Create t3",
-			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
-				_, err := conn.Exec(ctx, "create table t3(id serial);")
+			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "create table t3(id serial);")
 				return err
 			},
-			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
-				_, err := conn.Exec(ctx, "drop table t3;")
+			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "drop table t3;")
 				return err
 			},
 		},
@@ -132,8 +132,8 @@ func createMixedSQLAndGoFuncMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migr
 		{
 			Sequence: 1,
 			Name:     "Create t1",
-			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
-				_, err := conn.Exec(ctx, "create table t1(id serial);")
+			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "create table t1(id serial);")
 				return err
 			},
 			DownSQL: "drop table t1;",
@@ -142,8 +142,8 @@ func createMixedSQLAndGoFuncMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migr
 			Sequence: 2,
 			Name:     "Create t2",
 			UpSQL:    "create table t2(id serial);",
-			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
-				_, err := conn.Exec(ctx, "drop table t2;")
+			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "drop table t2;")
 				return err
 			},
 		},
@@ -182,8 +182,8 @@ func TestMigrationValidation(t *testing.T) {
 			{
 				Sequence: 1, Name: "M1",
 				UpSQL: "create table t1(id serial);",
-				UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
-					_, err := conn.Exec(ctx, "create table t1(id serial);")
+				UpFunc: func(ctx context.Context, tx pgx.Tx) error {
+					_, err := tx.Exec(ctx, "create table t1(id serial);")
 					return err
 				},
 			},
@@ -212,8 +212,8 @@ func TestMigrationValidation(t *testing.T) {
 				Sequence: 1, Name: "M1",
 				UpSQL:   "create table t1(id serial);",
 				DownSQL: "drop table t1;",
-				DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
-					_, err := conn.Exec(ctx, "drop table t1;")
+				DownFunc: func(ctx context.Context, tx pgx.Tx) error {
+					_, err := tx.Exec(ctx, "drop table t1;")
 					return err
 				},
 			},

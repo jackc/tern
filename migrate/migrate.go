@@ -68,7 +68,7 @@ func (e MigrationPgError) Unwrap() error {
 }
 
 // MigrationFunc can be used to define a [Migration] using a Go function.
-type MigrationFunc func(ctx context.Context, conn *pgx.Conn) error
+type MigrationFunc func(context.Context, pgx.Tx) error
 
 // A Migration is a database schema state transition. It performs the modifications needed to bring
 // the database schema up from its prior state to the new state (and optionally back down again).
@@ -399,13 +399,13 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		var current *Migration
 		var sql string
 		var sequence int32
-		var migrateFunc MigrationFunc // Will do the migration step.
+		var funcMigration MigrationFunc // Will be set for a Go function migration.
 		if direction == 1 {
 			current = m.Migrations[currentVersion]
 			sequence = current.Sequence
 			sql = current.UpSQL
 			if !current.isSQL(directionName) {
-				migrateFunc = current.UpFunc
+				funcMigration = current.UpFunc
 			}
 		} else {
 			current = m.Migrations[currentVersion-1]
@@ -415,13 +415,10 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 			sequence = current.Sequence - 1
 			sql = current.DownSQL
 			if !current.isSQL(directionName) {
-				migrateFunc = current.DownFunc
+				funcMigration = current.DownFunc
 			}
 		}
 		useTx := !m.options.DisableTx && current.wantTx(directionName)
-		if current.isSQL(directionName) {
-			migrateFunc = sqlFunc(current, directionName, useTx)
-		}
 
 		var tx pgx.Tx
 		if useTx {
@@ -438,7 +435,13 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		}
 
 		// Execute the migration.
-		if err := migrateFunc(ctx, m.conn); err != nil {
+		var err error
+		if current.isSQL(directionName) {
+			err = m.doSQLMigration(ctx, current, directionName, useTx)
+		} else {
+			err = funcMigration(ctx, tx)
+		}
+		if err != nil {
 			return err
 		}
 
@@ -521,27 +524,27 @@ func setAt(strs []string, value string, pos int64) []string {
 	return strs
 }
 
-// sqlFunc creates a [MigrationFunc] for the supplied SQL-based [Migration] in the given direction
-// ([up] or [down]).
-func sqlFunc(m *Migration, directionName string, useTx bool) MigrationFunc {
-	sql := m.UpSQL
-	if directionName == down {
-		sql = m.DownSQL
+// doSQLMigration performs the given SQL-based [Migration] in the given direction ([up] or [down]).
+// useTx indicates if the [Migration] is run in the context of a transaction.
+func (m *Migrator) doSQLMigration(ctx context.Context, migration *Migration, direction string, useTx bool) error {
+	sql := migration.UpSQL
+	if direction == down {
+		sql = migration.DownSQL
 	}
-	return func(ctx context.Context, conn *pgx.Conn) error {
-		sqlStatements := []string{sql}
-		if !useTx {
-			sqlStatements = sqlsplit.Split(sql)
-		}
-		// Execute the migration
-		for _, statement := range sqlStatements {
-			if _, err := conn.Exec(ctx, statement); err != nil {
-				if err, ok := err.(*pgconn.PgError); ok {
-					return MigrationPgError{MigrationName: m.Name, Sql: statement, PgError: err}
-				}
-				return err
+
+	sqlStatements := []string{sql}
+	if !useTx {
+		sqlStatements = sqlsplit.Split(sql)
+	}
+	// Execute the migration
+	for _, statement := range sqlStatements {
+		if _, err := m.conn.Exec(ctx, statement); err != nil {
+			if err, ok := err.(*pgconn.PgError); ok {
+				return MigrationPgError{MigrationName: migration.Name, Sql: statement, PgError: err}
 			}
+			return err
 		}
-		return nil
 	}
+	return nil
+
 }
