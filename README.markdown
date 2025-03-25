@@ -372,20 +372,20 @@ The sample code below shows how a `migrate.Migrator` can be set up to perform mi
 ```go
 	// Note: requires the right mix of environment variables to be set: PGHOST, PGPORT, PGDATABASE,
 	// PGUSER, PGPASSWORD.
-	conn, _ = pgx.Connect(ctx, "")
-	m, _ = migrate.NewMigrator(context.Background(), conn, "my_schema_version")
+	conn, _ := pgx.Connect(ctx, "")
+	m, _ := migrate.NewMigrator(context.Background(), conn, "my_schema_version")
 
 	m.Migrations = []*migrate.Migration{
 		// Migration that uses Go functions.
 		{
 			Sequence: 1,
 			Name:     "1",
-			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "CREATE TABLE tmp (id INT);")
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "CREATE TABLE tmp (id INT);")
 				return err
 			},
-			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "DROP TABLE tmp;")
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "DROP TABLE tmp;")
 				return err
 			},
 		},
@@ -401,8 +401,8 @@ The sample code below shows how a `migrate.Migrator` can be set up to perform mi
 		{
 			Sequence: 3,
 			Name:     "3",
-			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "CREATE TABLE tmp3 (id INT);")
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "CREATE TABLE tmp3 (id INT);")
 				return err
 			},
 			DownSQL: `DROP TABLE tmp3;`,
