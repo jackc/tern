@@ -67,8 +67,9 @@ func (e MigrationPgError) Unwrap() error {
 	return e.PgError
 }
 
-// MigrationFunc can be used to define a [Migration] using a Go function.
-type MigrationFunc func(context.Context, pgx.Tx) error
+// MigrationFunc can be used to define a [Migration] using a Go function. The [Migrator] will open a
+// new transaction for the passed [pgx.Conn] unless [Migration.DisableFuncTx] is true.
+type MigrationFunc func(context.Context, *pgx.Conn) error
 
 // A Migration is a database schema state transition. It performs the modifications needed to bring
 // the database schema up from its prior state to the new state (and optionally back down again).
@@ -80,12 +81,18 @@ type Migration struct {
 	Name string
 
 	// UpSQL declares SQL statements that brings the database up from its prior [Migration]
-	// state. Cannot be used together with [UpFunc].
+	// state. The [Migrator] will run the statements in a transaction unless the SQL contains
+	// [disableTxPattern]. Cannot be used together with [UpFunc].
 	UpSQL string
 	// DownSQL declares SQL statements that brings the database back down to its prior
-	// [Migration] state. Cannot be used together with [DownFunc].
+	// [Migration] state. The [Migrator] will run the statements in a transaction unless the SQL
+	// contains [disableTxPattern]. Cannot be used together with [DownFunc].
 	DownSQL string
 
+	// DisableFuncTx, when true, tells the [Migrator] to not start a new transaction before
+	// calling [UpFunc] (or [DownFunc]). Some SQL statements such as `create index concurrently`
+	// cannot run within a transaction.
+	DisableFuncTx bool
 	// UpFunc is a Go function that brings the database up from its prior state [Migration]
 	// state. Cannot be used together with [UpSQL].
 	UpFunc MigrationFunc
@@ -103,17 +110,17 @@ func (m *Migration) isSQL(direction string) bool {
 	return m.DownSQL != ""
 }
 
-// wantTx returns true if the [Migration] wants to run in a transaction. The direction can either be
-// [up] or [down].
-func (m *Migration) wantTx(direction string) bool {
-	if !m.isSQL(direction) {
-		// We always want a transaction for function-based transactions.
-		return true
+// disableTx returns true if the [Migrator] should not start a new transaction before running the
+// [Migration]. The direction can either be [up] or [down].
+func (m *Migration) disableTx(direction string) bool {
+	if m.isSQL(direction) {
+		if direction == up {
+			return disableTxPattern.MatchString(m.UpSQL)
+		}
+		return disableTxPattern.MatchString(m.DownSQL)
 	}
-	if direction == up {
-		return !disableTxPattern.MatchString(m.UpSQL)
-	}
-	return !disableTxPattern.MatchString(m.DownSQL)
+
+	return m.DisableFuncTx
 }
 
 // irreversible returns true if the [Migration] cannot be undone.
@@ -418,7 +425,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 				funcMigration = current.DownFunc
 			}
 		}
-		useTx := !m.options.DisableTx && current.wantTx(directionName)
+		useTx := !m.options.DisableTx && !current.disableTx(directionName)
 
 		var tx pgx.Tx
 		if useTx {
@@ -439,7 +446,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		if current.isSQL(directionName) {
 			err = m.doSQLMigration(ctx, current, directionName, useTx)
 		} else {
-			err = funcMigration(ctx, tx)
+			err = funcMigration(ctx, m.conn)
 		}
 		if err != nil {
 			return err

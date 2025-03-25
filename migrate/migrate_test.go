@@ -89,36 +89,36 @@ func createGoFuncMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 		{
 			Sequence: 1,
 			Name:     "Create t1",
-			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "create table t1(id serial);")
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "create table t1(id serial);")
 				return err
 			},
-			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "drop table t1;")
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "drop table t1;")
 				return err
 			},
 		},
 		{
 			Sequence: 2,
 			Name:     "Create t2",
-			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "create table t2(id serial);")
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "create table t2(id serial);")
 				return err
 			},
-			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "drop table t2;")
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "drop table t2;")
 				return err
 			},
 		},
 		{
 			Sequence: 3,
 			Name:     "Create t3",
-			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "create table t3(id serial);")
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "create table t3(id serial);")
 				return err
 			},
-			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "drop table t3;")
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "drop table t3;")
 				return err
 			},
 		},
@@ -132,8 +132,8 @@ func createMixedSQLAndGoFuncMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migr
 		{
 			Sequence: 1,
 			Name:     "Create t1",
-			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "create table t1(id serial);")
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "create table t1(id serial);")
 				return err
 			},
 			DownSQL: "drop table t1;",
@@ -142,8 +142,8 @@ func createMixedSQLAndGoFuncMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migr
 			Sequence: 2,
 			Name:     "Create t2",
 			UpSQL:    "create table t2(id serial);",
-			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
-				_, err := tx.Exec(ctx, "drop table t2;")
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "drop table t2;")
 				return err
 			},
 		},
@@ -182,8 +182,8 @@ func TestMigrationValidation(t *testing.T) {
 			{
 				Sequence: 1, Name: "M1",
 				UpSQL: "create table t1(id serial);",
-				UpFunc: func(ctx context.Context, tx pgx.Tx) error {
-					_, err := tx.Exec(ctx, "create table t1(id serial);")
+				UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					_, err := conn.Exec(ctx, "create table t1(id serial);")
 					return err
 				},
 			},
@@ -212,8 +212,8 @@ func TestMigrationValidation(t *testing.T) {
 				Sequence: 1, Name: "M1",
 				UpSQL:   "create table t1(id serial);",
 				DownSQL: "drop table t1;",
-				DownFunc: func(ctx context.Context, tx pgx.Tx) error {
-					_, err := tx.Exec(ctx, "drop table t1;")
+				DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					_, err := conn.Exec(ctx, "drop table t1;")
 					return err
 				},
 			},
@@ -572,6 +572,71 @@ syntax error;`,
 	assert.Error(t, err)
 	require.EqualValues(t, 0, currentVersion(t, conn))
 	require.True(t, tableExists(t, conn, "t1"))
+}
+
+func TestMigrationDisableFuncTx(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	t.Run("with DisableFuncTx false Migrator runs function in a transaction ", func(t *testing.T) {
+		var inTxn bool
+		m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+		assert.NoError(t, err)
+		m.Migrations = []*migrate.Migration{
+			{
+				Sequence: 1, Name: "Create t1",
+				DisableFuncTx: false,
+				UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					inTxn = conn.PgConn().TxStatus() == 'T'
+					return nil
+				},
+				DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					inTxn = conn.PgConn().TxStatus() == 'T'
+					return nil
+				},
+			},
+		}
+		// UpFunc.
+		inTxn = false
+		assert.False(t, inTxn)
+		assert.NoError(t, m.Migrate(context.Background()))
+		assert.True(t, inTxn)
+		// DownFunc.
+		inTxn = false
+		assert.False(t, inTxn)
+		assert.NoError(t, m.MigrateTo(context.Background(), 0))
+		assert.True(t, inTxn)
+	})
+
+	t.Run("with DisableFuncTx true Migrator runs function outside transaction ", func(t *testing.T) {
+		var inTxn bool
+		m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+		assert.NoError(t, err)
+		m.Migrations = []*migrate.Migration{
+			{
+				Sequence: 1, Name: "Create t1",
+				DisableFuncTx: true,
+				UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					inTxn = conn.PgConn().TxStatus() == 'T'
+					return nil
+				},
+				DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					inTxn = conn.PgConn().TxStatus() == 'T'
+					return nil
+				},
+			},
+		}
+		// UpFunc.
+		inTxn = true
+		assert.True(t, inTxn)
+		assert.NoError(t, m.Migrate(context.Background()))
+		assert.False(t, inTxn)
+		// DownFunc.
+		inTxn = true
+		assert.True(t, inTxn)
+		assert.NoError(t, m.MigrateTo(context.Background(), 0))
+		assert.False(t, inTxn)
+	})
 }
 
 // // https://github.com/jackc/tern/issues/18
