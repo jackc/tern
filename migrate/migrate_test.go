@@ -83,6 +83,74 @@ func createSampleMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 	return m
 }
 
+func createGoFuncMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
+	m := createEmptyMigrator(t, conn)
+	m.Migrations = []*migrate.Migration{
+		{
+			Sequence: 1,
+			Name:     "Create t1",
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "create table t1(id serial);")
+				return err
+			},
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "drop table t1;")
+				return err
+			},
+		},
+		{
+			Sequence: 2,
+			Name:     "Create t2",
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "create table t2(id serial);")
+				return err
+			},
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "drop table t2;")
+				return err
+			},
+		},
+		{
+			Sequence: 3,
+			Name:     "Create t3",
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "create table t3(id serial);")
+				return err
+			},
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "drop table t3;")
+				return err
+			},
+		},
+	}
+	return m
+}
+
+func createMixedSQLAndGoFuncMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
+	m := createEmptyMigrator(t, conn)
+	m.Migrations = []*migrate.Migration{
+		{
+			Sequence: 1,
+			Name:     "Create t1",
+			UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "create table t1(id serial);")
+				return err
+			},
+			DownSQL: "drop table t1;",
+		},
+		{
+			Sequence: 2,
+			Name:     "Create t2",
+			UpSQL:    "create table t2(id serial);",
+			DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+				_, err := conn.Exec(ctx, "drop table t2;")
+				return err
+			},
+		},
+	}
+	return m
+}
+
 func TestNewMigrator(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
@@ -102,6 +170,58 @@ func TestNewMigrator(t *testing.T) {
 	initialVersion, err := m.GetCurrentVersion(context.Background())
 	assert.NoError(t, err)
 	require.EqualValues(t, 0, initialVersion)
+}
+
+func TestMigrationValidation(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	t.Run("must not specify both UpSQL and UpFunc", func(t *testing.T) {
+		m := createEmptyMigrator(t, conn)
+		m.Migrations = []*migrate.Migration{
+			{
+				Sequence: 1, Name: "M1",
+				UpSQL: "create table t1(id serial);",
+				UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					_, err := conn.Exec(ctx, "create table t1(id serial);")
+					return err
+				},
+			},
+		}
+		err := m.Migrate(context.Background())
+		assert.Error(t, err)
+		assert.EqualError(t, err, "cannot specify both UpSQL and UpFunc for a migration")
+	})
+
+	t.Run("must specify either UpSQL or UpFunc", func(t *testing.T) {
+		m := createEmptyMigrator(t, conn)
+		m.Migrations = []*migrate.Migration{
+			{
+				Sequence: 1, Name: "M1",
+			},
+		}
+		err := m.Migrate(context.Background())
+		assert.Error(t, err)
+		assert.EqualError(t, err, "must specify either UpSQL or UpFunc for a migration")
+	})
+
+	t.Run("must not specify both DownSQL and DownFunc", func(t *testing.T) {
+		m := createEmptyMigrator(t, conn)
+		m.Migrations = []*migrate.Migration{
+			{
+				Sequence: 1, Name: "M1",
+				UpSQL:   "create table t1(id serial);",
+				DownSQL: "drop table t1;",
+				DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					_, err := conn.Exec(ctx, "drop table t1;")
+					return err
+				},
+			},
+		}
+		err := m.Migrate(context.Background())
+		assert.Error(t, err)
+		assert.EqualError(t, err, "cannot specify both DownSQL and DownFunc for a migration")
+	})
 }
 
 func TestAppendMigration(t *testing.T) {
@@ -223,6 +343,44 @@ func TestMigrate(t *testing.T) {
 	assert.NoError(t, err)
 	currentVersion := currentVersion(t, conn)
 	assert.EqualValues(t, 3, currentVersion)
+}
+
+func TestMigrateUsingGoFunctions(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createGoFuncMigrator(t, conn)
+
+	// Migrate up
+	assert.NoError(t, m.Migrate(context.Background()))
+	assert.EqualValues(t, 3, currentVersion(t, conn))
+	assert.True(t, tableExists(t, conn, "t1"))
+	assert.True(t, tableExists(t, conn, "t2"))
+	assert.True(t, tableExists(t, conn, "t3"))
+
+	// Migrate down
+	assert.NoError(t, m.MigrateTo(context.Background(), 0))
+	assert.EqualValues(t, 0, currentVersion(t, conn))
+	assert.False(t, tableExists(t, conn, "t1"))
+	assert.False(t, tableExists(t, conn, "t2"))
+	assert.False(t, tableExists(t, conn, "t3"))
+}
+
+func TestMigrateUsingMixedSQLAndGoFunctions(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createMixedSQLAndGoFuncMigrator(t, conn)
+
+	// Migrate up
+	assert.NoError(t, m.Migrate(context.Background()))
+	assert.EqualValues(t, 2, currentVersion(t, conn))
+	assert.True(t, tableExists(t, conn, "t1"))
+	assert.True(t, tableExists(t, conn, "t2"))
+
+	// Migrate down
+	assert.NoError(t, m.MigrateTo(context.Background(), 0))
+	assert.EqualValues(t, 0, currentVersion(t, conn))
+	assert.False(t, tableExists(t, conn, "t1"))
+	assert.False(t, tableExists(t, conn, "t2"))
 }
 
 func TestMigrateToLifeCycle(t *testing.T) {
@@ -416,6 +574,71 @@ syntax error;`,
 	require.True(t, tableExists(t, conn, "t1"))
 }
 
+func TestMigrationDisableFuncTx(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	t.Run("with DisableFuncTx false Migrator runs function in a transaction ", func(t *testing.T) {
+		var inTxn bool
+		m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+		assert.NoError(t, err)
+		m.Migrations = []*migrate.Migration{
+			{
+				Sequence: 1, Name: "Create t1",
+				DisableFuncTx: false,
+				UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					inTxn = conn.PgConn().TxStatus() == 'T'
+					return nil
+				},
+				DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					inTxn = conn.PgConn().TxStatus() == 'T'
+					return nil
+				},
+			},
+		}
+		// UpFunc.
+		inTxn = false
+		assert.False(t, inTxn)
+		assert.NoError(t, m.Migrate(context.Background()))
+		assert.True(t, inTxn)
+		// DownFunc.
+		inTxn = false
+		assert.False(t, inTxn)
+		assert.NoError(t, m.MigrateTo(context.Background(), 0))
+		assert.True(t, inTxn)
+	})
+
+	t.Run("with DisableFuncTx true Migrator runs function outside transaction ", func(t *testing.T) {
+		var inTxn bool
+		m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+		assert.NoError(t, err)
+		m.Migrations = []*migrate.Migration{
+			{
+				Sequence: 1, Name: "Create t1",
+				DisableFuncTx: true,
+				UpFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					inTxn = conn.PgConn().TxStatus() == 'T'
+					return nil
+				},
+				DownFunc: func(ctx context.Context, conn *pgx.Conn) error {
+					inTxn = conn.PgConn().TxStatus() == 'T'
+					return nil
+				},
+			},
+		}
+		// UpFunc.
+		inTxn = true
+		assert.True(t, inTxn)
+		assert.NoError(t, m.Migrate(context.Background()))
+		assert.False(t, inTxn)
+		// DownFunc.
+		inTxn = true
+		assert.True(t, inTxn)
+		assert.NoError(t, m.MigrateTo(context.Background(), 0))
+		assert.False(t, inTxn)
+	})
+}
+
 // // https://github.com/jackc/tern/issues/18
 func TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(t *testing.T) {
 	conn := connectConn(t)
@@ -439,7 +662,7 @@ func TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(t *testing.T) {
 	require.EqualValues(t, 3, mCurrentVersion)
 }
 
-func Example_OnStartMigrationProgressLogging() {
+func Example_onStartMigrationProgressLogging() {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("MIGRATE_TEST_CONN_STRING"))
 	if err != nil {
 		fmt.Printf("Unable to establish connection: %v", err)

@@ -6,7 +6,8 @@ workflow for managing database code such as functions and views.
 ## Features
 
 * Multi-platform
-* Stand-alone binary
+* Use as stand-alone binary or library
+* Supports both SQL migrations and Go function migrations
 * SSH tunnel support built-in
 * Data variable interpolation into migrations
 
@@ -362,9 +363,54 @@ Tern will automatically use an SSH agent or `~/.ssh/id_dsa`, `~/.ssh/id_rsa`,
 
 ## Embedding Tern
 
-All the actual functionality of tern is in the github.com/jackc/tern/v2/migrate
+All the actual functionality of tern is in the `github.com/jackc/tern/v2/migrate`
 library. If you need to embed migrations into your own application this
 library can help. If you don't need the full functionality of tern, then a migration generator script as described below may be a easier way of embedding simple migrations.
+
+The sample code below shows how a `migrate.Migrator` can be set up to perform migration steps both as Go functions or as pure SQL statements.
+
+```go
+	// Note: requires the right mix of environment variables to be set: PGHOST, PGPORT, PGDATABASE,
+	// PGUSER, PGPASSWORD.
+	conn, _ = pgx.Connect(ctx, "")
+	m, _ = migrate.NewMigrator(context.Background(), conn, "my_schema_version")
+
+	m.Migrations = []*migrate.Migration{
+		// Migration that uses Go functions.
+		{
+			Sequence: 1,
+			Name:     "1",
+			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "CREATE TABLE tmp (id INT);")
+				return err
+			},
+			DownFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "DROP TABLE tmp;")
+				return err
+			},
+		},
+		// Migration that uses SQL.
+		{
+			Sequence: 2,
+			Name:     "2",
+			UpSQL:    `CREATE TABLE tmp2 (id INT);`,
+			DownSQL:  `DROP TABLE tmp2;`,
+		},
+
+		// Migration that uses both Go function and SQL.
+		{
+			Sequence: 3,
+			Name:     "3",
+			UpFunc: func(ctx context.Context, tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, "CREATE TABLE tmp3 (id INT);")
+				return err
+			},
+			DownSQL: `DROP TABLE tmp3;`,
+		},
+	}
+
+	_ = m.Migrate(ctx)
+```
 
 ## Generating a Migration Generator SQL Script
 
