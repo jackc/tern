@@ -1124,6 +1124,8 @@ func LoadConfig() (*Config, error) {
 		config.ConnConfig.RuntimeParams["application_name"] = "tern"
 	}
 
+	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeDescribeExec
+
 	return config, nil
 }
 
