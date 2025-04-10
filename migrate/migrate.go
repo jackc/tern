@@ -582,17 +582,23 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 
 // Not Thread Safe / Lock Safe
 func (m *Migrator) createIfNotExistsVersionTable(ctx context.Context) error {
-	_, err := m.conn.Exec(ctx, fmt.Sprintf(`
-		create table if not exists %s(version int4 not null primary key) partition by range(version) (
+	partition := ";"
+
+	if m.options.CockroachDbCompatible {
+		partition = `partition by range(version) (
 			partition version values from (0) to (MAXVALUE),
 			partition special values from (MINVALUE) to (0)
-		);
+		);`
+	}
+
+	_, err := m.conn.Exec(ctx, fmt.Sprintf(`
+		create table if not exists %s(version int4 not null primary key) %s
 
 		with initial(version) as (values (-1), (0))
 		insert into %s(version)
 		select * from initial
 		where 0=(select count(*) from %s);
-	`, m.versionTable, m.versionTable, m.versionTable))
+	`, m.versionTable, partition, m.versionTable, m.versionTable))
 
 	return err
 }
