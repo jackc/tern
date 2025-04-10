@@ -70,7 +70,7 @@ func tableExists(t testing.TB, conn *pgx.Conn, tableName string) bool {
 
 func createEmptyMigrator(t testing.TB, conn *pgx.Conn) *migrate.Migrator {
 	var err error
-	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
 	assert.NoError(t, err)
 	return m
 }
@@ -156,7 +156,7 @@ func TestNewMigrator(t *testing.T) {
 	defer conn.Close(context.Background())
 
 	// Initial run
-	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
 	assert.NoError(t, err)
 
 	// Creates version table
@@ -164,7 +164,7 @@ func TestNewMigrator(t *testing.T) {
 	require.True(t, schemaVersionExists)
 
 	// Succeeds when version table is already created
-	m, err = migrate.NewMigrator(context.Background(), conn, versionTable)
+	m, err = migrate.NewMigrator(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
 	assert.NoError(t, err)
 
 	initialVersion, err := m.GetCurrentVersion(context.Background())
@@ -326,7 +326,7 @@ func TestLoadMigrationsNoForward(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
 
-	m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
 	assert.NoError(t, err)
 
 	m.Data = map[string]interface{}{"prefix": "foo"}
@@ -476,13 +476,7 @@ func TestMigrateToBoundaries(t *testing.T) {
 	require.EqualError(t, err, "destination version 4 is outside the valid versions of 0 to 3")
 
 	// When schema version says it is negative
-	mustExec(t, conn, "update "+versionTable+" set version=-1")
-	err = m.MigrateTo(context.Background(), int32(1))
-	// -1 is a special row for locking
-	require.EqualError(t, err, "no rows in result set")
-
-	// When schema version says it is negative
-	mustExec(t, conn, "update "+versionTable+" set version=4")
+	mustExec(t, conn, "update "+versionTable+" set version=4 where version >= 0")
 	err = m.MigrateTo(context.Background(), int32(1))
 	require.EqualError(t, err, "current version 4 is outside the valid versions of 0 to 3")
 }
@@ -507,7 +501,7 @@ func TestMigrateToDisableTxInTx(t *testing.T) {
 	tx, err := conn.Begin(ctx)
 	assert.NoError(t, err)
 
-	m, err := migrate.NewMigratorEx(ctx, conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	m, err := migrate.NewMigrator(ctx, conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
 	assert.NoError(t, err)
 	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
 	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
@@ -532,7 +526,7 @@ func TestMigrateToDisableTx(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
 
-	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, &migrate.MigratorOptions{DisableTx: true})
 	assert.NoError(t, err)
 	m.AppendMigration("Create t1", "create table t1(id serial);", "drop table t1;")
 	m.AppendMigration("Create t2", "create table t2(id serial);", "drop table t2;")
@@ -560,7 +554,7 @@ func TestMigrateToDisableTxInMigration(t *testing.T) {
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
 
-	m, err := migrate.NewMigratorEx(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
+	m, err := migrate.NewMigrator(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
 	assert.NoError(t, err)
 	m.AppendMigration(
 		"Create t1",
@@ -581,7 +575,7 @@ func TestMigrationDisableFuncTx(t *testing.T) {
 
 	t.Run("with DisableFuncTx false Migrator runs function in a transaction ", func(t *testing.T) {
 		var inTxn bool
-		m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+		m, err := migrate.NewMigrator(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
 		assert.NoError(t, err)
 		m.Migrations = []*migrate.Migration{
 			{
@@ -611,7 +605,7 @@ func TestMigrationDisableFuncTx(t *testing.T) {
 
 	t.Run("with DisableFuncTx true Migrator runs function outside transaction ", func(t *testing.T) {
 		var inTxn bool
-		m, err := migrate.NewMigrator(context.Background(), conn, versionTable)
+		m, err := migrate.NewMigrator(context.Background(), conn, versionTable, &migrate.MigratorOptions{})
 		assert.NoError(t, err)
 		m.Migrations = []*migrate.Migration{
 			{
@@ -677,7 +671,7 @@ func Example_onStartMigrationProgressLogging() {
 	}
 
 	var m *migrate.Migrator
-	m, err = migrate.NewMigrator(context.Background(), conn, "schema_version")
+	m, err = migrate.NewMigrator(context.Background(), conn, "schema_version", &migrate.MigratorOptions{})
 	if err != nil {
 		fmt.Printf("Unable to create migrator: %v", err)
 		return
