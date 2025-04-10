@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
@@ -21,6 +22,7 @@ import (
 var (
 	migrationPattern = regexp.MustCompile(`\A(\d+)_.+\.sql\z`)
 	disableTxPattern = regexp.MustCompile(`(?m)^---- tern: disable-tx ----$`)
+	disableRowLocks = regexp.MustCompile(`(?m)^---- tern: disable-row-locks ----$`)
 )
 
 const (
@@ -131,10 +133,18 @@ func (m *Migration) irreversible() bool {
 type MigratorOptions struct {
 	// DisableTx causes the Migrator not to run migrations in a transaction.
 	DisableTx bool
+	CockroachDbCompatible bool
 }
 
 type Migrator struct {
 	conn         *pgx.Conn
+
+	// optionally, used for locking mechanisms
+	// instead of advisory locks on the primary conn
+	lockingConn  *pgx.Conn
+	// optionally, Tx for the locking mechanism
+	lockingTx 	 pgx.Tx
+
 	versionTable string
 	options      *MigratorOptions
 	Migrations   []*Migration
@@ -143,13 +153,26 @@ type Migrator struct {
 }
 
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
-func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
-	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{})
-}
-
-// NewMigratorEx initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
-func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
+func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
 	m = &Migrator{conn: conn, versionTable: versionTable, options: opts}
+
+	m.Migrations = make([]*Migration, 0)
+	m.Data = make(map[string]interface{})
+
+	if opts.CockroachDbCompatible {
+		m.lockingConn, err = pgx.ConnectConfig(ctx, conn.Config().Copy())
+		if err != nil {
+			// try anyways and leave lockingconn nil? either way there's a failure
+			// For now, be explicit and block so it's clear
+			return
+		}
+
+		runtime.SetFinalizer(m.lockingConn, func(c *pgx.Conn) {
+			if err := c.Close(ctx); err != nil {
+				fmt.Println("trying to close lockingConn:", err.Error())
+			}
+		})
+	}
 
 	// This is a bit of a kludge for the gengen command. A migrator without a conn is normally not allowed. However, the
 	// gengen command doesn't call any of the methods that require a conn. Potentially, we could refactor Migrator to
@@ -157,8 +180,7 @@ func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opt
 	if conn != nil {
 		err = m.ensureSchemaVersionTableExists(ctx)
 	}
-	m.Migrations = make([]*Migration, 0)
-	m.Data = make(map[string]interface{})
+
 	return
 }
 
@@ -325,9 +347,6 @@ func (m *Migrator) AppendMigration(name, upSQL, downSQL string) {
 // Migrate runs pending migrations
 // It calls m.OnStart when it begins a migration
 func (m *Migrator) Migrate(ctx context.Context) error {
-	if err := m.validate(); err != nil {
-		return err
-	}
 	return m.MigrateTo(ctx, m.highestSequenceNum())
 }
 
@@ -344,6 +363,56 @@ func (m *Migrator) validate() error {
 			return fmt.Errorf("cannot specify both DownSQL and DownFunc for a migration")
 		}
 	}
+	return nil
+}
+
+func (m *Migrator) acquireLock(ctx context.Context) error {
+	if m.lockingConn != nil {
+		return m.acquireCustomLock(ctx)
+	}
+
+	return acquireAdvisoryLock(ctx, m.conn)
+}
+
+func (m *Migrator) releaseLock(ctx context.Context) error {
+	if m.lockingConn != nil {
+		return m.releaseCustomLock(ctx)
+	}
+
+	return releaseAdvisoryLock(ctx, m.conn)
+}
+
+var ErrLockNonRecursive = errors.New("lock is nonrecursive")
+
+// CockroachDB Compatible Locking Mechanism
+func (m *Migrator) acquireCustomLock(ctx context.Context) (err error) {
+	query := fmt.Sprintf("select * from %s where version = -1 for update nowait", m.versionTable)
+
+	if m.lockingTx != nil {
+		return ErrLockNonRecursive
+	}
+
+	m.lockingTx, err = m.lockingConn.Begin(ctx)
+	if err != nil {
+		return
+	}
+
+	if _, err := m.lockingTx.Exec(ctx, query); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CockroachDB Compatible Locking Mechanism
+func (m *Migrator) releaseCustomLock(ctx context.Context) error {
+	err := m.lockingTx.Commit(ctx)
+	if err != nil {
+		return err
+	}
+
+	m.lockingTx = nil
+
 	return nil
 }
 
@@ -366,12 +435,12 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		return err
 	}
 
-	err = acquireAdvisoryLock(ctx, m.conn)
+	err = m.acquireLock(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		unlockErr := releaseAdvisoryLock(ctx, m.conn)
+		unlockErr := m.releaseLock(ctx)
 		if err == nil && unlockErr != nil {
 			err = unlockErr
 		}
@@ -456,7 +525,7 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		m.conn.Exec(ctx, "reset all")
 
 		// Add one to the version
-		_, err = m.conn.Exec(ctx, "update "+m.versionTable+" set version=$1", sequence)
+		_, err = m.conn.Exec(ctx, "update "+m.versionTable+" set version=$1 where version >= 0", sequence)
 		if err != nil {
 			return err
 		}
@@ -475,17 +544,30 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 }
 
 func (m *Migrator) GetCurrentVersion(ctx context.Context) (v int32, err error) {
-	err = m.conn.QueryRow(ctx, "select version from "+m.versionTable).Scan(&v)
-	return v, err
+	query := "select version from "+m.versionTable+" where version >= 0"
+
+	if m.lockingTx != nil {
+		err = m.lockingTx.QueryRow(ctx, query).Scan(&v)
+	} else {
+		err = m.conn.QueryRow(ctx, query).Scan(&v)
+	}
+
+	return
 }
 
 func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err error) {
-	err = acquireAdvisoryLock(ctx, m.conn)
+	if m.lockingConn != nil {
+		// solve the bootstrap problem needing the table
+		// to lock and needing a lock to create the table
+		return m.createIfNotExistsVersionTable(ctx)
+	}
+
+	err = m.acquireLock(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		unlockErr := releaseAdvisoryLock(ctx, m.conn)
+		unlockErr := m.releaseLock(ctx)
 		if err == nil && unlockErr != nil {
 			err = unlockErr
 		}
@@ -495,13 +577,23 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 		return err
 	}
 
-	_, err = m.conn.Exec(ctx, fmt.Sprintf(`
-    create table if not exists %s(version int4 not null);
+	return m.createIfNotExistsVersionTable(ctx)
+}
 
-    insert into %s(version)
-    select 0
-    where 0=(select count(*) from %s);
-  `, m.versionTable, m.versionTable, m.versionTable))
+// Not Thread Safe / Lock Safe
+func (m *Migrator) createIfNotExistsVersionTable(ctx context.Context) error {
+	_, err := m.conn.Exec(ctx, fmt.Sprintf(`
+		create table if not exists %s(version int4 not null primary key) partition by range(version) (
+			partition version values from (0) to (MAXVALUE),
+			partition special values from (MINVALUE) to (0)
+		);
+
+		with initial(version) as (values (-1), (0))
+		insert into %s(version)
+		select * from initial
+		where 0=(select count(*) from %s);
+	`, m.versionTable, m.versionTable, m.versionTable))
+
 	return err
 }
 
@@ -545,13 +637,26 @@ func (m *Migrator) doSQLMigration(ctx context.Context, migration *Migration, dir
 	}
 	// Execute the migration
 	for _, statement := range sqlStatements {
-		if _, err := m.conn.Exec(ctx, statement); err != nil {
-			if err, ok := err.(*pgconn.PgError); ok {
-				return MigrationPgError{MigrationName: migration.Name, Sql: statement, PgError: err}
-			}
+		if err := m.sqlExecMigration(ctx, migration, statement); err != nil {
 			return err
 		}
 	}
-	return nil
 
+	return nil
+}
+
+func (m *Migrator) sqlExecMigration(ctx context.Context, migration *Migration, statement string) error {
+	if disableRowLocks.MatchString(statement) && m.lockingTx != nil {
+		m.releaseLock(ctx)
+		defer m.acquireLock(ctx)
+	}
+
+	if _, err := m.conn.Exec(ctx, statement); err != nil {
+		if err, ok := err.(*pgconn.PgError); ok {
+			return MigrationPgError{MigrationName: migration.Name, Sql: statement, PgError: err}
+		}
+		return err
+	}
+
+	return nil
 }

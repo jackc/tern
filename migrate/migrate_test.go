@@ -46,7 +46,7 @@ func prepareDatabase(t testing.TB) {
 
 func currentVersion(t testing.TB, conn *pgx.Conn) int32 {
 	var n int32
-	err := conn.QueryRow(context.Background(), "select version from "+versionTable).Scan(&n)
+	err := conn.QueryRow(context.Background(), "select version from "+versionTable+" where version >= 0").Scan(&n)
 	assert.NoError(t, err)
 	return n
 }
@@ -478,7 +478,8 @@ func TestMigrateToBoundaries(t *testing.T) {
 	// When schema version says it is negative
 	mustExec(t, conn, "update "+versionTable+" set version=-1")
 	err = m.MigrateTo(context.Background(), int32(1))
-	require.EqualError(t, err, "current version -1 is outside the valid versions of 0 to 3")
+	// -1 is a special row for locking
+	require.EqualError(t, err, "no rows in result set")
 
 	// When schema version says it is negative
 	mustExec(t, conn, "update "+versionTable+" set version=4")
