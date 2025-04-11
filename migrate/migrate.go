@@ -600,9 +600,9 @@ func (m *Migrator) createIfNotExistsVersionTable(ctx context.Context) error {
 
 			with initial(lock) as (values (true))
 			insert into %s_lock(lock)
-			select * from %s_lock
+			select * from initial
 			where 0=(select count(*) from %s)
-		`, m.versionTable, m.versionTable, m.versionTable, m.versionTable))
+		`, m.versionTable, m.versionTable, m.versionTable))
 	}
 
 	return err
