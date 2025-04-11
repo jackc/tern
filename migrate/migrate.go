@@ -386,7 +386,7 @@ var ErrLockNonRecursive = errors.New("lock is nonrecursive")
 
 // CockroachDB Compatible Locking Mechanism
 func (m *Migrator) acquireCustomLock(ctx context.Context) (err error) {
-	query := fmt.Sprintf("select * from %s where version = -1 for update nowait", m.versionTable)
+	query := fmt.Sprintf("select * from %s_lock for update nowait", m.versionTable)
 
 	if m.lockingTx != nil {
 		return ErrLockNonRecursive
@@ -582,23 +582,28 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 
 // Not Thread Safe / Lock Safe
 func (m *Migrator) createIfNotExistsVersionTable(ctx context.Context) error {
-	partition := ";"
-
-	if m.options.CockroachDbCompatible {
-		partition = `partition by range(version) (
-			partition version values from (0) to (MAXVALUE),
-			partition special values from (MINVALUE) to (0)
-		);`
-	}
-
 	_, err := m.conn.Exec(ctx, fmt.Sprintf(`
-		create table if not exists %s(version int4 not null primary key) %s
+		create table if not exists %s(version int4 not null primary key);
 
-		with initial(version) as (values (-1), (0))
+		with initial(version) as (values (0))
 		insert into %s(version)
 		select * from initial
 		where 0=(select count(*) from %s);
-	`, m.versionTable, partition, m.versionTable, m.versionTable))
+	`, m.versionTable, m.versionTable, m.versionTable))
+	if err != nil {
+		return err
+	}
+
+	if m.options.CockroachDbCompatible {
+		_, err = m.conn.Exec(ctx, fmt.Sprintf(`
+			create table if not exists %s_lock(lock boolean not null primary key default true);
+
+			with initial(lock) as (values (true))
+			insert into %s_lock(lock)
+			select * from %s_lock
+			where 0=(select count(*) from %s)
+		`, m.versionTable, m.versionTable, m.versionTable, m.versionTable))
+	}
 
 	return err
 }
