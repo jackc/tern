@@ -223,14 +223,19 @@ func (m *Migrator) LoadMigrations(fsys fs.FS) error {
 	)
 
 	var sharedPaths []string
-	fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+	if err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if (!d.IsDir()) &&
 			(filepath.Dir(path) != ".") &&
 			(filepath.Ext(path) == ".sql") {
 			sharedPaths = append(sharedPaths, path)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
 
 	for _, p := range sharedPaths {
 		body, err := fs.ReadFile(fsys, p)

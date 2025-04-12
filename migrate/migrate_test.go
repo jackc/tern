@@ -240,14 +240,14 @@ func TestAppendMigration(t *testing.T) {
 	assert.Equal(t, m.Migrations[0].DownSQL, downSQL)
 }
 
-// func TestLoadMigrationsMissingDirectory(t *testing.T) {
-// 	conn := connectConn(t)
-// 	defer conn.Close(context.Background())
-// 	m := createEmptyMigrator(t, conn)
+func TestLoadMigrationsMissingDirectory(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createEmptyMigrator(t, conn)
 
-// 	err := m.LoadMigrations("testdata/missing")
-// 	require.EqualError(t, err, "open testdata/missing: no such file or directory")
-// }
+	err := m.LoadMigrations(os.DirFS("testdata/invalid"))
+	require.EqualError(t, err, "stat .: no such file or directory")
+}
 
 func TestLoadMigrationsEmptyDirectory(t *testing.T) {
 	conn := connectConn(t)
