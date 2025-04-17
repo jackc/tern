@@ -152,8 +152,12 @@ type Migrator struct {
 	Data         map[string]interface{}              // Data available to use in migrations
 }
 
+func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string) (m *Migrator, err error) {
+	return NewMigratorEx(ctx, conn, versionTable, &MigratorOptions{})
+}
+
 // NewMigrator initializes a new Migrator. It is highly recommended that versionTable be schema qualified.
-func NewMigrator(ctx context.Context, conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
+func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opts *MigratorOptions) (m *Migrator, err error) {
 	m = &Migrator{conn: conn, versionTable: versionTable, options: opts}
 
 	m.Migrations = make([]*Migration, 0)
