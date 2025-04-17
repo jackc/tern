@@ -171,6 +171,9 @@ func NewMigratorEx(ctx context.Context, conn *pgx.Conn, versionTable string, opt
 			return
 		}
 
+		// Migrator is the owner of this connection. Instead of requiring the user of Migrator
+		// to close (a usage change) let go manage the runtime
+		// Once go compat moves to 1.24 can replace with AddCleanup https://pkg.go.dev/runtime@master#AddCleanup
 		runtime.SetFinalizer(m.lockingConn, func(c *pgx.Conn) {
 			if err := c.Close(ctx); err != nil {
 				fmt.Println("trying to close lockingConn:", err.Error())
