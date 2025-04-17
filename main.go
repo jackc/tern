@@ -511,7 +511,7 @@ func Migrate(cmd *cobra.Command, args []string) {
 
 	migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
 
-	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable, &migOpts)
+	migrator, err := migrate.NewMigratorEx(ctx, conn, config.VersionTable, &migOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -618,7 +618,7 @@ func Gengen(cmd *cobra.Command, args []string) {
 
 	migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
 
-	migrator, err := migrate.NewMigrator(context.Background(), nil, config.VersionTable, &migOpts)
+	migrator, err := migrate.NewMigratorEx(context.Background(), nil, config.VersionTable, &migOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -871,7 +871,7 @@ func Status(cmd *cobra.Command, args []string) {
 
 	migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
 
-	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable, &migOpts)
+	migrator, err := migrate.NewMigratorEx(ctx, conn, config.VersionTable, &migOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -1316,7 +1316,7 @@ func PrintMigrations(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 		migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
-		migrator, err = migrate.NewMigrator(ctx, conn, config.VersionTable, &migOpts)
+		migrator, err = migrate.NewMigratorEx(ctx, conn, config.VersionTable, &migOpts)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 			os.Exit(1)
@@ -1331,7 +1331,7 @@ func PrintMigrations(cmd *cobra.Command, args []string) {
 		currentVersion = int32(n)
 
 		migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
-		migrator, err = migrate.NewMigrator(ctx, nil, config.VersionTable, &migOpts)
+		migrator, err = migrate.NewMigratorEx(ctx, nil, config.VersionTable, &migOpts)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 			os.Exit(1)
