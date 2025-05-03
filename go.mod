@@ -1,8 +1,6 @@
 module github.com/jackc/tern/v2
 
-go 1.21
-
-toolchain go1.21.13
+go 1.23.0
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
@@ -11,7 +9,7 @@ require (
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.9.0
 	github.com/vaughan0/go-ini v0.0.0-20130923145212-a98ad7ee00ec
-	golang.org/x/crypto v0.35.0
+	golang.org/x/crypto v0.37.0
 )
 
 require (
@@ -30,7 +28,7 @@ require (
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
