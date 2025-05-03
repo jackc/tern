@@ -465,6 +465,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.3.3 (May 3, 2025)
+
+* Upgrade golang.org/x/crypto to v0.37.0
+
 ## 2.3.2 (December 25, 2024)
 
 * Fix goreleaser build script
