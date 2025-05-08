@@ -25,5 +25,6 @@ testdata/tern.conf
 /tern
 /tmp
 
+.vscode
 .idea/*
 dist
