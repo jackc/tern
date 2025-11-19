@@ -1,0 +1,14 @@
+{
+	"image": "golang:1.24",
+	"features": {},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.go"
+			]
+		}
+	},
+	"remoteUser": "root"
+}
+
+
