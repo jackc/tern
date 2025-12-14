@@ -465,6 +465,11 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.3.4 (December 14, 2025)
+
+* Upgrade golang.org/x/crypto to v0.46.0
+* Fix `renumber finish` with certain types of paths
+
 ## 2.3.3 (May 3, 2025)
 
 * Upgrade golang.org/x/crypto to v0.37.0
