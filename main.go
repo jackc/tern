@@ -944,12 +944,6 @@ func RenumberFinish(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	for i, s := range currentMigrations {
-		s = strings.TrimPrefix(s, migrationsPath)
-		s = strings.TrimPrefix(s, string(filepath.Separator))
-		currentMigrations[i] = s
-	}
-
 	renumberFilepath := filepath.Join(migrationsPath, ".tern-renumber.tmp")
 	renumberFile, err := os.Open(renumberFilepath)
 	if err != nil {
@@ -1034,7 +1028,7 @@ func findMigrationsForRenumber(path string) ([]string, error) {
 		return nil, err
 	}
 
-	paths := make([]string, 0, len(fileInfos))
+	fileNames := make([]string, 0, len(fileInfos))
 	for _, fi := range fileInfos {
 		if fi.IsDir() {
 			continue
@@ -1045,10 +1039,10 @@ func findMigrationsForRenumber(path string) ([]string, error) {
 			continue
 		}
 
-		paths = append(paths, filepath.Join(path, fi.Name()))
+		fileNames = append(fileNames, fi.Name())
 	}
 
-	return paths, nil
+	return fileNames, nil
 }
 
 func LoadConfig() (*Config, error) {
