@@ -95,12 +95,13 @@ type Config struct {
 }
 
 var cliOptions struct {
-	destinationVersion string
-	currentVersion     string
-	migrationsPath     string
-	configPaths        []string
-	editNewMigration   bool
-	outputFile         string // used for gengen or print-migrations
+	destinationVersion       string
+	currentVersion           string
+	migrationsPath           string
+	configPaths              []string
+	editNewMigration         bool
+	outputFile               string // used for gengen or print-migrations
+	cockroachDbCompatible bool
 
 	connString   string
 	host         string
@@ -187,6 +188,7 @@ The word "last":
 		Run: Migrate,
 	}
 	cmdMigrate.Flags().StringVarP(&cliOptions.destinationVersion, "destination", "d", "last", "destination migration version")
+	cmdMigrate.Flags().BoolVar(&cliOptions.cockroachDbCompatible, "cockroachdb", false, "CockroachDB compatibility flag avoiding advisory locks (default is false)")
 	addConfigFlagsToCommand(cmdMigrate)
 
 	cmdCode := &cobra.Command{
@@ -507,7 +509,9 @@ func Migrate(cmd *cobra.Command, args []string) {
 	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
-	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
+	migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
+
+	migrator, err := migrate.NewMigratorEx(ctx, conn, config.VersionTable, &migOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -612,7 +616,9 @@ func Gengen(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	migrator, err := migrate.NewMigrator(context.Background(), nil, config.VersionTable)
+	migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
+
+	migrator, err := migrate.NewMigratorEx(context.Background(), nil, config.VersionTable, &migOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -863,7 +869,9 @@ func Status(cmd *cobra.Command, args []string) {
 	config, conn := loadConfigAndConnectToDB(ctx)
 	defer conn.Close(ctx)
 
-	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
+	migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
+
+	migrator, err := migrate.NewMigratorEx(ctx, conn, config.VersionTable, &migOpts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 		os.Exit(1)
@@ -1301,7 +1309,8 @@ func PrintMigrations(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error connecting to database:\n  %v\n", err)
 			os.Exit(1)
 		}
-		migrator, err = migrate.NewMigrator(ctx, conn, config.VersionTable)
+		migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
+		migrator, err = migrate.NewMigratorEx(ctx, conn, config.VersionTable, &migOpts)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 			os.Exit(1)
@@ -1315,7 +1324,8 @@ func PrintMigrations(cmd *cobra.Command, args []string) {
 		}
 		currentVersion = int32(n)
 
-		migrator, err = migrate.NewMigrator(ctx, nil, config.VersionTable)
+		migOpts := migrate.MigratorOptions{ CockroachDbCompatible: cliOptions.cockroachDbCompatible }
+		migrator, err = migrate.NewMigratorEx(ctx, nil, config.VersionTable, &migOpts)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
 			os.Exit(1)
