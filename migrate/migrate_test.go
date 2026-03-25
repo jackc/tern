@@ -639,6 +639,39 @@ func TestMigrationDisableFuncTx(t *testing.T) {
 	})
 }
 
+// https://github.com/jackc/tern/issues/130
+func TestAddPrimaryKeyToExistingVersionTable(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	// Create version table without primary key (simulating pre-fix installation)
+	_, err := conn.Exec(context.Background(), fmt.Sprintf("create table %s(version int4 not null)", versionTable))
+	require.NoError(t, err)
+	_, err = conn.Exec(context.Background(), fmt.Sprintf("insert into %s(version) values(0)", versionTable))
+	require.NoError(t, err)
+
+	// Verify no primary key exists
+	var hasPK bool
+	err = conn.QueryRow(context.Background(),
+		"select exists(select 1 from pg_constraint where conrelid=$1::regclass and contype='p')",
+		versionTable,
+	).Scan(&hasPK)
+	require.NoError(t, err)
+	require.False(t, hasPK, "expected version table to not have a primary key yet")
+
+	// NewMigrator should add the primary key
+	_, err = migrate.NewMigrator(context.Background(), conn, versionTable)
+	require.NoError(t, err)
+
+	// Verify primary key was added
+	err = conn.QueryRow(context.Background(),
+		"select exists(select 1 from pg_constraint where conrelid=$1::regclass and contype='p')",
+		versionTable,
+	).Scan(&hasPK)
+	require.NoError(t, err)
+	require.True(t, hasPK, "expected version table to have a primary key after NewMigrator")
+}
+
 // // https://github.com/jackc/tern/issues/18
 func TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(t *testing.T) {
 	conn := connectConn(t)
