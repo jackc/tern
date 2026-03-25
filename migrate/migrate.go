@@ -501,7 +501,7 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 	}
 
 	_, err = m.conn.Exec(ctx, fmt.Sprintf(`
-    create table if not exists %s(version int4 not null);
+    create table if not exists %s(version int4 not null primary key);
 
     insert into %s(version)
     select 0
