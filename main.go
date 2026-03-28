@@ -659,7 +659,7 @@ with migrations(version, up_sql) as (
 	(0,
 $tern_gengen$
 begin;
-create table {{ .VersionTable }}(version int4 not null);
+create table {{ .VersionTable }}(version int4 not null primary key);
 insert into {{ .VersionTable }}(version) values(0);
 $tern_gengen$)
 {{ range .Migrations }}

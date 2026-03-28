@@ -496,12 +496,27 @@ func (m *Migrator) ensureSchemaVersionTableExists(ctx context.Context) (err erro
 		}
 	}()
 
-	if ok, err := m.versionTableExists(ctx); err != nil || ok {
+	if ok, err := m.versionTableExists(ctx); err != nil {
+		return err
+	} else if ok {
+		_, err = m.conn.Exec(ctx, fmt.Sprintf(`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint
+          where conrelid = '%[1]s'::regclass
+          and contype = 'p'
+        ) then
+          alter table %[1]s add primary key (version);
+        end if;
+      end
+      $$;
+    `, m.versionTable))
 		return err
 	}
 
 	_, err = m.conn.Exec(ctx, fmt.Sprintf(`
-    create table if not exists %s(version int4 not null);
+    create table if not exists %s(version int4 not null primary key);
 
     insert into %s(version)
     select 0
