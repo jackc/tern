@@ -465,6 +465,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.3.6 (March 28, 2026)
+
+* Add primary key to version table to support logical replication (Patrick Scheid)
+
 ## 2.3.5 (January 30, 2026)
 
 * Fix goreleaser script
