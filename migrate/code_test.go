@@ -16,6 +16,12 @@ func TestLoadCodePackage(t *testing.T) {
 	assert.NotNil(t, codePackage)
 }
 
+func TestLoadCodePackageNestedPaths(t *testing.T) {
+	codePackage, err := migrate.LoadCodePackage(os.DirFS("testdata/code_nested"))
+	assert.NoError(t, err)
+	assert.NotNil(t, codePackage)
+}
+
 func TestLoadCodePackageNotCodePackage(t *testing.T) {
 	codePackage, err := migrate.LoadCodePackage(os.DirFS("testdata/sample"))
 	assert.EqualError(t, err, "install.sql not found")

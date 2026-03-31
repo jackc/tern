@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path"
 	"path/filepath"
 	"text/template"
 
@@ -48,7 +49,7 @@ func findCodeFiles(fsys fs.FS) ([]string, error) {
 			}
 
 			for _, p := range paths {
-				results = append(results, filepath.Join(e.Name(), p))
+				results = append(results, path.Join(e.Name(), p))
 			}
 		} else {
 			match, err := filepath.Match("*.sql", e.Name())
