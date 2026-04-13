@@ -323,7 +323,11 @@ it do any error handling
 
 This is useful for baselining an existing database when adopting tern.
 You can create a migration representing the current schema and override
-the version to that without actually executing the migration.`,
+the version to that without actually executing the migration.
+
+Note: tern migrate can only roll down through migrations that were
+actually applied. After an override, rolling back requires another
+override-version call rather than tern migrate -d <lower>.`,
 		Run: OverrideVersion,
 	}
 	addConfigFlagsToCommand(cmdOverrideVersion)
@@ -538,7 +542,9 @@ func Migrate(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	var lastDirection string
 	migrator.OnStart = func(sequence int32, name, direction, sql string) {
+		lastDirection = direction
 		fmt.Printf("%s executing %s %s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05"), name, direction, sql)
 	}
 
@@ -608,6 +614,13 @@ func Migrate(cmd *cobra.Command, args []string) {
 		} else {
 			fmt.Fprintln(os.Stderr, err)
 		}
+
+		if lastDirection == "down" {
+			fmt.Fprintln(os.Stderr, "\nHint: if you previously used `tern override-version`, the migration")
+			fmt.Fprintln(os.Stderr, "may never have been applied. Use `tern override-version <n>` to")
+			fmt.Fprintln(os.Stderr, "adjust the version without executing migrations.")
+		}
+
 		os.Exit(1)
 	}
 }
