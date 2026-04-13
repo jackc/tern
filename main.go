@@ -901,10 +901,16 @@ func Status(cmd *cobra.Command, args []string) {
 	}
 
 	var status string
-	behindCount := len(migrator.Migrations) - int(migrationVersion)
-	if behindCount == 0 {
+	currentVersion := int(migrationVersion)
+	totalMigrations := len(migrator.Migrations)
+	switch {
+	case currentVersion < 0:
+		status = "version below zero"
+	case currentVersion > totalMigrations:
+		status = "version out of range"
+	case currentVersion == totalMigrations:
 		status = "up to date"
-	} else {
+	default:
 		status = "migration(s) pending"
 	}
 
