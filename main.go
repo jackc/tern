@@ -316,6 +316,18 @@ it do any error handling
 	cmdPrintMigrations.Flags().StringVarP(&cliOptions.migrationsPath, "migrations", "m", "", "migrations path (default is .)")
 	cmdPrintMigrations.Flags().StringVarP(&cliOptions.outputFile, "output", "o", "", "output file")
 
+	cmdOverrideVersion := &cobra.Command{
+		Use:   "override-version VERSION",
+		Short: "Override the current migration version without running migrations",
+		Long: `Override the current migration version without running any migrations.
+
+This is useful for baselining an existing database when adopting tern.
+You can create a migration representing the current schema and override
+the version to that without actually executing the migration.`,
+		Run: OverrideVersion,
+	}
+	addConfigFlagsToCommand(cmdOverrideVersion)
+
 	cmdVersion := &cobra.Command{
 		Use:   "version",
 		Short: "Print version",
@@ -341,6 +353,7 @@ it do any error handling
 	rootCmd.AddCommand(cmdNew)
 	rootCmd.AddCommand(cmdGengen)
 	rootCmd.AddCommand(cmdPrintMigrations)
+	rootCmd.AddCommand(cmdOverrideVersion)
 	rootCmd.AddCommand(cmdVersion)
 	rootCmd.Execute()
 }
@@ -899,6 +912,57 @@ func Status(cmd *cobra.Command, args []string) {
 	fmt.Printf("version:  %d of %d\n", migrationVersion, len(migrator.Migrations))
 	fmt.Println("host:    ", config.ConnConfig.Host)
 	fmt.Println("database:", config.ConnConfig.Database)
+}
+
+func OverrideVersion(cmd *cobra.Command, args []string) {
+	if len(args) != 1 {
+		cmd.Help()
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+
+	targetVersion, err := strconv.ParseInt(args[0], 10, 32)
+	if errors.Is(err, strconv.ErrRange) {
+		fmt.Fprintf(os.Stderr, "Error: version %q is out of range\n", args[0])
+		os.Exit(1)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %q is not a valid version number\n", args[0])
+		os.Exit(1)
+	}
+	if targetVersion < 0 {
+		fmt.Fprintln(os.Stderr, "Error: version must be non-negative")
+		os.Exit(1)
+	}
+
+	config, conn := loadConfigAndConnectToDB(ctx)
+	defer conn.Close(ctx)
+
+	migrator, err := migrate.NewMigrator(ctx, conn, config.VersionTable)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing migrator:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	currentVersion, err := migrator.GetCurrentVersion(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error retrieving migration version:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	if int64(currentVersion) == targetVersion {
+		fmt.Printf("version already at %d\n", targetVersion)
+		return
+	}
+
+	err = migrator.SetVersion(ctx, int32(targetVersion))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error overriding version:\n  %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("version overridden: %d → %d\n", currentVersion, targetVersion)
 }
 
 func RenumberStart(cmd *cobra.Command, args []string) {

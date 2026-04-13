@@ -219,6 +219,31 @@ To use a different migrations directory:
 
     tern migrate --migrations path/to/migrations
 
+## Baselining an Existing Database
+
+When adopting tern on a database that already has a schema, you cannot simply
+run `tern migrate` because the objects the migrations would create already
+exist. `tern override-version` sets the migration version in the version table
+without running any migrations, allowing you to mark the current schema state
+as a specific version.
+
+The typical workflow is:
+
+1. Write a migration that represents the current schema.
+2. Run `tern override-version N` where N is the sequence number of that
+   migration.
+3. From this point on, `tern migrate` works normally for subsequent
+   migrations.
+
+```
+tern override-version 1
+```
+
+Note that `tern migrate -d <lower>` cannot roll back through migrations that
+were skipped via `override-version` — the down SQL would try to drop tables
+that were never created. To adjust the version after an override, use another
+`override-version` call.
+
 ## Renumbering Conflicting Migrations
 
 When migrations are created on multiple branches the migrations need to be renumbered when the branches are merged. The

@@ -672,6 +672,34 @@ func TestAddPrimaryKeyToExistingVersionTable(t *testing.T) {
 	require.True(t, hasPK, "expected version table to have a primary key after NewMigrator")
 }
 
+func TestSetVersion(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+
+	m := createEmptyMigrator(t, conn)
+	require.EqualValues(t, 0, currentVersion(t, conn))
+
+	// Set version forward
+	err := m.SetVersion(context.Background(), 5)
+	require.NoError(t, err)
+	require.EqualValues(t, 5, currentVersion(t, conn))
+
+	// Set version backward
+	err = m.SetVersion(context.Background(), 2)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, currentVersion(t, conn))
+
+	// Set version to same value
+	err = m.SetVersion(context.Background(), 2)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, currentVersion(t, conn))
+
+	// Set version back to zero
+	err = m.SetVersion(context.Background(), 0)
+	require.NoError(t, err)
+	require.EqualValues(t, 0, currentVersion(t, conn))
+}
+
 // // https://github.com/jackc/tern/issues/18
 func TestNotCreatingVersionTableIfAlreadyVisibleInSearchPath(t *testing.T) {
 	conn := connectConn(t)
