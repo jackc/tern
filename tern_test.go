@@ -248,6 +248,52 @@ version:  1 of 2`
 	}
 }
 
+func TestOverrideVersion(t *testing.T) {
+	// Ensure database is in clean state
+	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	// Reset version on the way out. Must use override-version (not migrate -d 0)
+	// because override-version sets the version without creating tables, so a real
+	// down-migration would fail trying to drop tables that never existed.
+	defer tern(t, "override-version", "-c", "testdata/tern.conf", "0")
+
+	// Override the version without running any migrations
+	output := tern(t, "override-version", "-c", "testdata/tern.conf", "2")
+	if !strings.Contains(output, "version overridden: 0 → 2") {
+		t.Errorf("Expected output to contain `version overridden: 0 → 2`, but it didn't. Output:\n%s", output)
+	}
+
+	// The version should be updated
+	if currentVersion(t) != 2 {
+		t.Errorf("Expected current version to be 2, but it was %d", currentVersion(t))
+	}
+
+	// But the tables should NOT exist — that's the whole point of override-version
+	if tableExists(t, "t1") {
+		t.Error("Expected table t1 to not exist (override-version must not run migrations)")
+	}
+	if tableExists(t, "t2") {
+		t.Error("Expected table t2 to not exist (override-version must not run migrations)")
+	}
+
+	// Override backward
+	output = tern(t, "override-version", "-c", "testdata/tern.conf", "1")
+	if !strings.Contains(output, "version overridden: 2 → 1") {
+		t.Errorf("Expected output to contain `version overridden: 2 → 1`, but it didn't. Output:\n%s", output)
+	}
+	if currentVersion(t) != 1 {
+		t.Errorf("Expected current version to be 1, but it was %d", currentVersion(t))
+	}
+
+	// Override to the same version prints a distinct message
+	output = tern(t, "override-version", "-c", "testdata/tern.conf", "1")
+	if !strings.Contains(output, "version already at 1") {
+		t.Errorf("Expected output to contain `version already at 1`, but it didn't. Output:\n%s", output)
+	}
+	if currentVersion(t) != 1 {
+		t.Errorf("Expected current version to be 1, but it was %d", currentVersion(t))
+	}
+}
+
 func TestInstallCode(t *testing.T) {
 	tern(t, "code", "install", "-c", "testdata/tern.conf", "testdata/code")
 
