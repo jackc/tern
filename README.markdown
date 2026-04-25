@@ -490,6 +490,12 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.4.0 (April 25, 2026)
+
+* Upgrade github.com/jackc/pgx/v5 and golang.org/x/crypto dependencies
+* Fix nested code package paths on Windows (use path.Join for fs.FS paths) (Erik-A49)
+* Add override-version command (Patrick Scheid)
+
 ## 2.3.6 (March 28, 2026)
 
 * Add primary key to version table to support logical replication (Patrick Scheid)
