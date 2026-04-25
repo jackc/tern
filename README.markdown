@@ -490,6 +490,10 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.4.1 (April 25, 2026)
+
+* Fix goreleaser script
+
 ## 2.4.0 (April 25, 2026)
 
 * Upgrade github.com/jackc/pgx/v5 and golang.org/x/crypto dependencies
