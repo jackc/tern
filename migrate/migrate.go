@@ -371,6 +371,18 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 		return err
 	}
 
+	// Fast path: if the database is already at targetVersion, return without
+	// acquiring the advisory lock. This avoids contention for callers that
+	// re-run Migrate after deploys with no schema change — a common case in
+	// CI/CD pipelines where every deploy invokes the migrator regardless of
+	// whether new migration files were added.
+	//
+	// Conservative by design: any error or out-of-range version falls through
+	// to the locked path so error semantics remain identical to before.
+	if atTarget, _ := m.atTargetVersion(ctx, targetVersion); atTarget {
+		return nil
+	}
+
 	err = acquireAdvisoryLock(ctx, m.conn)
 	if err != nil {
 		return err
@@ -482,6 +494,28 @@ func (m *Migrator) MigrateTo(ctx context.Context, targetVersion int32) (err erro
 func (m *Migrator) GetCurrentVersion(ctx context.Context) (v int32, err error) {
 	err = m.conn.QueryRow(ctx, "select version from "+m.versionTable).Scan(&v)
 	return v, err
+}
+
+// atTargetVersion reports whether the database is already at targetVersion,
+// without acquiring the advisory lock. Used by MigrateTo as a fast path so
+// schema-stable deploys do not contend on the lock.
+//
+// Returns false (not an error) when targetVersion is out of range or when
+// the version stored in the schema_version table is out of range. The caller
+// falls through to the locked path, which produces the existing
+// BadVersionError, so user-visible error semantics do not change.
+func (m *Migrator) atTargetVersion(ctx context.Context, targetVersion int32) (bool, error) {
+	if targetVersion < 0 || int32(len(m.Migrations)) < targetVersion {
+		return false, nil
+	}
+	currentVersion, err := m.GetCurrentVersion(ctx)
+	if err != nil {
+		return false, err
+	}
+	if currentVersion < 0 || int32(len(m.Migrations)) < currentVersion {
+		return false, nil
+	}
+	return currentVersion == targetVersion, nil
 }
 
 // SetVersion sets the current migration version without running any migrations.

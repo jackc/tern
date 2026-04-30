@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -343,6 +344,51 @@ func TestMigrate(t *testing.T) {
 	assert.NoError(t, err)
 	currentVersion := currentVersion(t, conn)
 	assert.EqualValues(t, 3, currentVersion)
+}
+
+// TestMigrateToSkipsAdvisoryLockWhenAtTarget proves that calling MigrateTo
+// against a database already at the target version does not contend on the
+// migrations advisory lock. The mechanism: hold the advisory lock from a
+// separate connection and call MigrateTo with a bounded context — without
+// the fast path it would block on pg_advisory_lock until the deadline; with
+// it the call returns immediately.
+func TestMigrateToSkipsAdvisoryLockWhenAtTarget(t *testing.T) {
+	conn := connectConn(t)
+	defer conn.Close(context.Background())
+	m := createSampleMigrator(t, conn)
+
+	// Bring the schema to the highest available version through the regular path.
+	require.NoError(t, m.Migrate(context.Background()))
+
+	// Hold tern's advisory lock from a second session. The lock id is
+	// the same private constant tern uses internally; if MigrateTo took
+	// the lock again, it would block on this until the test times out.
+	connStr, ok := os.LookupEnv("MIGRATE_TEST_CONN_STRING")
+	require.True(t, ok, "MIGRATE_TEST_CONN_STRING must be set")
+	lockConn, err := pgx.Connect(context.Background(), connStr)
+	require.NoError(t, err)
+	defer lockConn.Close(context.Background())
+	const ternLockNum = int64(9628173550095224)
+	_, err = lockConn.Exec(context.Background(), "select pg_advisory_lock($1)", ternLockNum)
+	require.NoError(t, err)
+	defer func() {
+		_, _ = lockConn.Exec(context.Background(), "select pg_advisory_unlock($1)", ternLockNum)
+	}()
+
+	// Bound the call so a regression manifests as a clear failure rather than a hang.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	err = m.MigrateTo(ctx, 3)
+	require.NoError(t, err)
+	require.Less(t, time.Since(start), 2*time.Second,
+		"MigrateTo at target should not contend on the advisory lock")
+
+	// Migrate should behave identically (it delegates to MigrateTo).
+	start = time.Now()
+	require.NoError(t, m.Migrate(ctx))
+	require.Less(t, time.Since(start), 2*time.Second,
+		"Migrate at target should not contend on the advisory lock")
 }
 
 func TestMigrateUsingGoFunctions(t *testing.T) {
