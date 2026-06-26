@@ -477,6 +477,7 @@ func NewMigration(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	fmt.Fprintln(os.Stdout, mPath)
 
 	if cliOptions.editNewMigration {
 		editor := os.Getenv("EDITOR")
