@@ -749,4 +749,4 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## License
 
-Copyright (c) 2011-2014 Jack Christensen, released under the MIT license
+Copyright (c) 2011-2026 Jack Christensen, released under the MIT license
