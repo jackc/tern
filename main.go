@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -94,7 +95,7 @@ type Config struct {
 	SSHConnConfig SSHConnConfig
 }
 
-var cliOptions struct {
+type cliOptionsConfig struct {
 	destinationVersion string
 	currentVersion     string
 	migrationsPath     string
@@ -119,6 +120,8 @@ var cliOptions struct {
 	sshUser       string
 	sshPassword   string
 }
+
+var cliOptions cliOptionsConfig
 
 func (c *Config) Validate() error {
 	if c.ConnConfig.Host == "" {
@@ -1171,14 +1174,20 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	// Set PG* variables from CLI args and config before parsing conn string
-	for key, value := range config.PGEnvvars {
-		if err := os.Setenv(key, value); err != nil {
-			return nil, fmt.Errorf("error setting PostgreSQL environment variables from config: %s: %w", key, err)
-		}
+	hasConnString := config.ConnString != ""
+
+	// Individual config properties and CLI arguments are explicit connection
+	// settings. Add them to the connection string so pgx gives them precedence
+	// over service-file settings and environment-variable defaults.
+	connString, err := mergeConnectionStringSettings(config.ConnString, config.PGEnvvars)
+	if err != nil {
+		return nil, err
+	}
+	if hasConnString {
+		config.ConnString = connString
 	}
 
-	if connConfig, err := pgx.ParseConfig(config.ConnString); err == nil {
+	if connConfig, err := pgx.ParseConfig(connString); err == nil {
 		config.ConnConfig = *connConfig
 	} else {
 		return nil, err
@@ -1203,6 +1212,76 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return config, nil
+}
+
+var pgEnvvarToConnStringKey = map[string]string{
+	"PGHOST":        "host",
+	"PGPORT":        "port",
+	"PGDATABASE":    "dbname",
+	"PGUSER":        "user",
+	"PGPASSWORD":    "password",
+	"PGSSLMODE":     "sslmode",
+	"PGSSLROOTCERT": "sslrootcert",
+}
+
+func mergeConnectionStringSettings(connString string, pgEnvvars map[string]string) (string, error) {
+	settings := make(map[string]string, len(pgEnvvars))
+	for envvar, value := range pgEnvvars {
+		key, ok := pgEnvvarToConnStringKey[envvar]
+		if !ok {
+			continue
+		}
+		// An empty password explicitly disables an ambient password. Other
+		// empty settings retain pgx's normal fallback behavior.
+		if value == "" && envvar != "PGPASSWORD" {
+			continue
+		}
+		settings[key] = value
+	}
+
+	if len(settings) == 0 {
+		return connString, nil
+	}
+
+	keys := make([]string, 0, len(settings))
+	for key := range settings {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") {
+		u, err := url.Parse(connString)
+		if err != nil {
+			return "", fmt.Errorf("error while applying database connection overrides: %w", err)
+		}
+
+		query := u.Query()
+		for _, key := range keys {
+			if key == "dbname" {
+				// pgx canonicalizes both dbname and database to the same
+				// setting. Remove both so map iteration order cannot decide
+				// which value wins.
+				query.Del("database")
+				query.Del("dbname")
+			}
+			query.Set(key, settings[key])
+		}
+		u.RawQuery = query.Encode()
+
+		return u.String(), nil
+	}
+
+	var buf strings.Builder
+	buf.WriteString(connString)
+	for _, key := range keys {
+		if buf.Len() > 0 {
+			buf.WriteByte(' ')
+		}
+		value := strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(settings[key])
+		fmt.Fprintf(&buf, "%s='%s'", key, value)
+	}
+
+	return buf.String(), nil
 }
 
 func appendConfigFromFile(config *Config, path string) error {
@@ -1309,6 +1388,9 @@ func appendConfigFromFile(config *Config, path string) error {
 func appendConfigFromCLIArgs(config *Config) error {
 	if cliOptions.connString != "" {
 		config.ConnString = cliOptions.connString
+		// A CLI connection string replaces all database connection settings
+		// loaded from config files. Individual CLI flags below can override it.
+		clear(config.PGEnvvars)
 		if _, err := pgx.ParseConfig(cliOptions.connString); err != nil {
 			return fmt.Errorf("error while parsing conn-string argument: %w", err)
 		}

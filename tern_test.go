@@ -124,6 +124,20 @@ func tern(t *testing.T, args ...string) string {
 	return string(output)
 }
 
+func commandEnv(overrides map[string]string) []string {
+	env := make([]string, 0, len(os.Environ())+len(overrides))
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if _, overridden := overrides[key]; !overridden {
+			env = append(env, entry)
+		}
+	}
+	for key, value := range overrides {
+		env = append(env, key+"="+value)
+	}
+	return env
+}
+
 func TestInitWithoutDirectory(t *testing.T) {
 	defer func() {
 		os.Remove("tern.conf")
@@ -328,6 +342,36 @@ version:  0 of 2`
 	if !strings.Contains(output, expected) {
 		t.Errorf("Expected status output to contain `%s`, but it didn't. Output:\n%s", expected, output)
 	}
+}
+
+func TestCLIUserOverridesPGService(t *testing.T) {
+	tempDir := t.TempDir()
+	serviceFile := filepath.Join(tempDir, "pg_service.conf")
+	err := os.WriteFile(serviceFile, []byte(`
+[precedence_test]
+host=service.example.com
+port=5432
+dbname=service_database
+user=service_user
+sslmode=disable
+`), 0o600)
+	require.NoError(t, err)
+	emptyConfig := filepath.Join(tempDir, "tern.conf")
+	err = os.WriteFile(emptyConfig, []byte("[database]\n"), 0o600)
+	require.NoError(t, err)
+
+	cmd := exec.Command("tmp/tern", "print-connstring", "--config", emptyConfig, "--user", "cli_user")
+	cmd.Env = commandEnv(map[string]string{
+		"PGSERVICE":     "precedence_test",
+		"PGSERVICEFILE": serviceFile,
+		"PGUSER":        "",
+		"PGPASSWORD":    "",
+		"PGPASSFILE":    filepath.Join(tempDir, "missing-pgpass"),
+		"TERN_CONFIG":   "",
+	})
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	assert.Equal(t, "postgres://cli_user:@service.example.com:5432/service_database?", string(output))
 }
 
 func TestConfigFileTemplateEvalWithEnvVar(t *testing.T) {
