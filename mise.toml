@@ -1,0 +1,8 @@
+[tools]
+go = '1.26.5'
+
+[env]
+MIGRATE_TEST_CONN_STRING = "database=tern_migrate_test"
+MIGRATE_TEST_DATABASE = "tern_migrate_test"
+TERN_TEST_DATABASE = "tern_test"
+TERN_TEST_CONN_STRING = "database=tern_test"

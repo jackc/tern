@@ -27,3 +27,5 @@ testdata/tern.conf
 
 .idea/*
 dist
+
+/.vscode

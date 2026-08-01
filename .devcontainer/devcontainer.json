@@ -1,0 +1,43 @@
+{
+	"name": "${localWorkspaceFolderBasename}",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
+	"workspaceFolder": "/workspaces/tern",
+
+	"containerEnv": {
+		"ATUIN_CONFIG_DIR":   "/persist/shared/atuin/config",
+		"ATUIN_DATA_DIR":     "/persist/shared/atuin/data",
+		"CLAUDE_CONFIG_DIR":  "/persist/shared/claude",
+		"GOCACHE":            "/persist/shared/go-cache",
+		"GOMODCACHE":         "/persist/shared/go/pkg/mod",
+		"GOPATH":             "/persist/shared/go",
+		"MISE_CACHE_DIR":     "/persist/shared/mise/cache",
+		"MISE_DATA_DIR":      "/persist/shared/mise/data",
+		"PSQL_HISTORY":       "/persist/shared/psql/history",
+    "CODEX_HOME":        "/persist/shared/codex"
+	},
+
+	"initializeCommand": "docker volume create devstate-shared-tern >/dev/null",
+	"onCreateCommand": ".devcontainer/on-create.bash",
+	"postCreateCommand": ".devcontainer/post-create.bash",
+  "waitFor": "postCreateCommand",
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true
+    },
+    "ghcr.io/devcontainers-extra/features/mise:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1.1.0": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "hverlin.mise-vscode",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  }
+}

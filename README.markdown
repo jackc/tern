@@ -468,6 +468,14 @@ disable-tx magic comment it will be ignored.
 
 ## Running the Tests
 
+The easiest way to run the tests is to open the project in a devcontainer.
+
+```
+go test ./...
+```
+
+If you are not using a devcontainer then perform the following setup instructions.
+
 To run the tests tern requires two test databases to run migrations against.
 
 1. Create a new database for main tern program tests (e.g. `tern_test`).

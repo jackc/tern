@@ -1,0 +1,58 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    volumes:
+      - ..:/workspaces/tern:cached
+      - devstate-local:/persist/local
+      - devstate-shared:/persist/shared
+      # Shared Unix-domain-socket directory: the db service writes its socket
+      # here and the app connects over it (faster than the localhost TCP path,
+      # used for benchmarking tern against the PostgreSQL oracle).
+      - pg-sockets:/var/run/postgresql
+    command: sleep infinity
+    environment:
+      # PostgreSQL connection settings for testing. PGHOST is the shared socket
+      # directory (a leading '/' makes libpq use the Unix socket), so oracle
+      # queries skip the TCP stack entirely — the fast path used for benchmarking
+      # tern against the PostgreSQL oracle. The default initdb pg_hba.conf gives
+      # `local all all trust`, so any user connects without a password over the
+      # socket — pick the connecting user freely via PGUSER. Connect over the
+      # socket (bare `psql` / `rake corpus:check`); never override PGHOST.
+      PGHOST: /var/run/postgresql
+      PGUSER: postgres
+      PGDATABASE: postgres
+
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    volumes:
+      - postgresql:/var/lib/postgresql
+      - pg-sockets:/var/run/postgresql
+    # Pin the socket directory to the shared volume so the app can reach it.
+    # max_connections is raised for parallel tests: each concurrent Go test
+    # holds its own pool against an exclusive test database, plus testdb
+    # maintenance connections per test process.
+    command: postgres -c unix_socket_directories=/var/run/postgresql -c max_connections=200
+    # On the DEFAULT compose network (no `network_mode: service:app`): the app connects over the
+    # shared pg-sockets volume (the Unix socket — PGHOST above). Sharing the app's netns instead
+    # bound PG onto the app's localhost and left the `db` service name unresolvable, which kept
+    # confusing oracle-connection attempts; the socket is the only path we use.
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+
+volumes:
+  postgresql:
+  # Shared between app and db so the Unix-domain socket is reachable cross-container.
+  pg-sockets:
+  # per-container persistence (unique per devcontainer instance via project-name prefix)
+  devstate-local:
+  # shared across all containers for this project
+  # pre-created in devcontainer.json's initializeCommand
+  devstate-shared:
+    name: devstate-shared-tern
+    external: true
