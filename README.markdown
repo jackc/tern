@@ -498,6 +498,14 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.4.2 (August 1, 2026)
+
+* Fix connection setting precedence
+* Add devcontainer development environment
+* Upgrade dependencies to reduce CVE exposure (Colin B)
+* Print new migration filepath on success to stdout (ukiran03)
+* Skip advisory lock when already at target version (Vadim Kharitonov)
+
 ## 2.4.1 (April 25, 2026)
 
 * Fix goreleaser script
