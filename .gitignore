@@ -29,3 +29,4 @@ testdata/tern.conf
 dist
 
 /.vscode
+/.dev/

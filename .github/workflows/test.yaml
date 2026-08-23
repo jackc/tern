@@ -1,0 +1,57 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install PostgreSQL 18
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-18 postgresql-client-18 netcat-openbsd
+          sudo systemctl stop postgresql.service || true
+
+      - name: Install mise tools
+        uses: jdx/mise-action@v4
+        with:
+          install: true
+
+      - name: Initialize development database
+        run: mise run dev:init
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mise run dev >"$RUNNER_TEMP/tern-process-compose.log" 2>&1 &
+          dev_pid=$!
+
+          cleanup() {
+            kill -TERM "$dev_pid" 2>/dev/null || true
+            wait "$dev_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for _ in $(seq 1 60); do
+            if mise exec -- pg_isready -q; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" != true ]; then
+            cat "$RUNNER_TEMP/tern-process-compose.log"
+            exit 1
+          fi
+
+          mise run test

@@ -14,7 +14,8 @@
 		"MISE_CACHE_DIR":     "/persist/shared/mise/cache",
 		"MISE_DATA_DIR":      "/persist/shared/mise/data",
 		"PSQL_HISTORY":       "/persist/shared/psql/history",
-    "CODEX_HOME":        "/persist/shared/codex"
+		"CODEX_HOME":         "/persist/shared/codex",
+		"TERN_DEV_STATE_DIR": "/persist/local/tern"
 	},
 
 	"initializeCommand": "docker volume create devstate-shared-tern >/dev/null",

@@ -468,27 +468,66 @@ disable-tx magic comment it will be ignored.
 
 ## Running the Tests
 
-The easiest way to run the tests is to open the project in a devcontainer.
+Tern uses [mise](https://mise.jdx.dev/) for its development tools and tasks and
+[Process Compose](https://github.com/F1bonacc1/process-compose) to run a
+worktree-local PostgreSQL 18 server in the foreground. Install mise once using
+either Homebrew or its standalone installer:
 
+```bash
+brew install mise
+# or: curl https://mise.run | sh
 ```
-go test ./...
+
+Mise is deliberately not included in the project's `Brewfile`, so `brew bundle`
+will not install a duplicate Homebrew-managed copy when mise was installed another
+way.
+
+From a clean macOS checkout:
+
+```bash
+brew bundle
+mise trust
+mise install
+mise run dev:init
+mise run dev
 ```
 
-If you are not using a devcontainer then perform the following setup instructions.
+`mise run dev` displays the Process Compose TUI and keeps PostgreSQL running
+until you exit it. In another terminal, run:
 
-To run the tests tern requires two test databases to run migrations against.
-
-1. Create a new database for main tern program tests (e.g. `tern_test`).
-2. Open testdata/tern.conf.example
-3. Enter the connection information.
-4. Save as testdata/tern.conf.
-5. Run tests with the connection string for the main tern program tests in the TERN_TEST_CONN_STRING environment variable.
-6. Create another database for the migrate library tests (e.g. `tern_migrate_test`).
-7. Run tests with the connection string for the migrate library tests in the MIGRATE_TEST_CONN_STRING environment variable
-
+```bash
+mise run test
 ```
-TERN_TEST_CONN_STRING="host=/private/tmp database=tern_test" MIGRATE_TEST_CONN_STRING="host=/private/tmp database=tern_migrate_test" MIGRATE_TEST_DATABASE=tern_migrate_test go test ./...
+
+The test task requires the foreground database, creates `tern_test` and
+`tern_migrate_test` when necessary, and then runs `go test ./...`. It does not
+start or stop PostgreSQL. To connect interactively while `dev` is active, run:
+
+```bash
+mise exec -- psql
 ```
+
+Other development commands are:
+
+```bash
+mise run build
+mise run db:status
+mise run dev:info
+mise run db:reset   # PostgreSQL must be stopped; discards this worktree's databases
+```
+
+Each worktree stores its PostgreSQL cluster, selected TCP port, generated test
+configuration, and Process Compose log under its ignored `.dev` directory.
+PostgreSQL is never registered as a Homebrew service. Removing `.dev`, or using
+`db:reset`, intentionally discards that worktree's test databases.
+
+### Dev Container
+
+The Dev Container uses the same mise tasks and foreground lifecycle. It keeps
+its database state in a container-local persistent volume instead of the native
+`.dev` directory. After opening the container, run `mise run dev`, then run
+`mise run test` from another terminal in the container. PostgreSQL is not
+started automatically with the container.
 
 ## Prior Ruby Gem Version
 

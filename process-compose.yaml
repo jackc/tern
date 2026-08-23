@@ -1,0 +1,27 @@
+version: "0.5"
+
+processes:
+  postgres:
+    description: Worktree-local PostgreSQL 18 server
+    command: >-
+      postgres
+      -D "${PGDATA}"
+      -h "${PGHOST}"
+      -p "${PGPORT}"
+      -k "${TERN_PG_SOCKET_DIR}"
+      -c max_connections=200
+    readiness_probe:
+      exec:
+        command: >-
+          pg_isready
+          -h "${PGHOST}"
+          -p "${PGPORT}"
+          -U "${PGUSER}"
+          -d "${PGDATABASE}"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 2
+      failure_threshold: 10
+    shutdown:
+      signal: 15
+      timeout_seconds: 15

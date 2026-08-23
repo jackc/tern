@@ -3,6 +3,3 @@ set -e
 
 sudo chown vscode:vscode /persist/local /persist/shared
 mkdir -p /persist/shared/{claude,codex,atuin/{config,data},go,go-cache,mise/{data,cache},psql,devcontainer-downloads}
-
-mise trust
-mise install

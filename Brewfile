@@ -1,0 +1,1 @@
+brew "postgresql@18"

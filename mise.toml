@@ -1,8 +1,36 @@
+min_version = "2026.8.0"
+
 [tools]
-go = '1.26.5'
+go = "1.26.5"
+process-compose = "1.122.0"
 
 [env]
-MIGRATE_TEST_CONN_STRING = "database=tern_migrate_test"
-MIGRATE_TEST_DATABASE = "tern_migrate_test"
-TERN_TEST_DATABASE = "tern_test"
-TERN_TEST_CONN_STRING = "database=tern_test"
+_.source = { path = "scripts/dev-env.bash", tools = true }
+
+[tasks."dev:init"]
+description = "Initialize this worktree's PostgreSQL cluster"
+run = "scripts/dev init"
+
+[tasks.dev]
+description = "Run this worktree's PostgreSQL server in the foreground"
+run = "scripts/dev dev"
+
+[tasks.test]
+description = "Run tests against the active development PostgreSQL server"
+run = "scripts/dev test"
+
+[tasks.build]
+description = "Build Tern"
+run = "go build ./..."
+
+[tasks."db:status"]
+description = "Show this worktree's PostgreSQL status"
+run = "scripts/dev status"
+
+[tasks."db:reset"]
+description = "Recreate this worktree's stopped PostgreSQL cluster"
+run = "scripts/dev reset"
+
+[tasks."dev:info"]
+description = "Show this worktree's development database configuration"
+run = "scripts/dev info"

@@ -28,6 +28,13 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func testConfigPath() string {
+	if path := os.Getenv("TERN_TEST_CONFIG"); path != "" {
+		return path
+	}
+	return "testdata/tern.conf"
+}
+
 func readConfig(path string) (*pgx.ConnConfig, error) {
 	file, err := ini.LoadFile(path)
 	if err != nil {
@@ -65,7 +72,7 @@ func readConfig(path string) (*pgx.ConnConfig, error) {
 
 func connectConn(t *testing.T) *pgx.Conn {
 	ctx := context.Background()
-	connConfig, err := readConfig("testdata/tern.conf")
+	connConfig, err := readConfig(testConfigPath())
 	require.NoError(t, err)
 
 	connConfig.TLSConfig = &tls.Config{InsecureSkipVerify: true}
@@ -99,7 +106,7 @@ func tableExists(t *testing.T, tableName string) bool {
 }
 
 func currentVersion(t *testing.T) int32 {
-	output := tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	output := tern(t, "status", "-m", "testdata", "-c", testConfigPath())
 	re := regexp.MustCompile(`version:\s+(\d+)`)
 	match := re.FindStringSubmatch(output)
 	if match == nil {
@@ -207,7 +214,7 @@ func TestMigrate(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		baseArgs := []string{"migrate", "-m", "testdata", "-c", "testdata/tern.conf"}
+		baseArgs := []string{"migrate", "-m", "testdata", "-c", testConfigPath()}
 		args := append(baseArgs, tt.args...)
 
 		tern(t, args...)
@@ -232,9 +239,9 @@ func TestMigrate(t *testing.T) {
 
 func TestStatus(t *testing.T) {
 	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath(), "-d", "0")
 
-	output := tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	output := tern(t, "status", "-m", "testdata", "-c", testConfigPath())
 	expected := `status:   migration(s) pending
 version:  0 of 2`
 	if !strings.Contains(output, expected) {
@@ -242,9 +249,9 @@ version:  0 of 2`
 	}
 
 	// Up all the way
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath())
 
-	output = tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	output = tern(t, "status", "-m", "testdata", "-c", testConfigPath())
 	expected = `status:   up to date
 version:  2 of 2`
 	if !strings.Contains(output, expected) {
@@ -252,9 +259,9 @@ version:  2 of 2`
 	}
 
 	// Back one
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "1")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath(), "-d", "1")
 
-	output = tern(t, "status", "-m", "testdata", "-c", "testdata/tern.conf")
+	output = tern(t, "status", "-m", "testdata", "-c", testConfigPath())
 	expected = `status:   migration(s) pending
 version:  1 of 2`
 	if !strings.Contains(output, expected) {
@@ -264,14 +271,14 @@ version:  1 of 2`
 
 func TestOverrideVersion(t *testing.T) {
 	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath(), "-d", "0")
 	// Reset version on the way out. Must use override-version (not migrate -d 0)
 	// because override-version sets the version without creating tables, so a real
 	// down-migration would fail trying to drop tables that never existed.
-	defer tern(t, "override-version", "-c", "testdata/tern.conf", "0")
+	defer tern(t, "override-version", "-c", testConfigPath(), "0")
 
 	// Override the version without running any migrations
-	output := tern(t, "override-version", "-c", "testdata/tern.conf", "2")
+	output := tern(t, "override-version", "-c", testConfigPath(), "2")
 	if !strings.Contains(output, "version overridden: 0 → 2") {
 		t.Errorf("Expected output to contain `version overridden: 0 → 2`, but it didn't. Output:\n%s", output)
 	}
@@ -290,7 +297,7 @@ func TestOverrideVersion(t *testing.T) {
 	}
 
 	// Override backward
-	output = tern(t, "override-version", "-c", "testdata/tern.conf", "1")
+	output = tern(t, "override-version", "-c", testConfigPath(), "1")
 	if !strings.Contains(output, "version overridden: 2 → 1") {
 		t.Errorf("Expected output to contain `version overridden: 2 → 1`, but it didn't. Output:\n%s", output)
 	}
@@ -299,7 +306,7 @@ func TestOverrideVersion(t *testing.T) {
 	}
 
 	// Override to the same version prints a distinct message
-	output = tern(t, "override-version", "-c", "testdata/tern.conf", "1")
+	output = tern(t, "override-version", "-c", testConfigPath(), "1")
 	if !strings.Contains(output, "version already at 1") {
 		t.Errorf("Expected output to contain `version already at 1`, but it didn't. Output:\n%s", output)
 	}
@@ -309,7 +316,7 @@ func TestOverrideVersion(t *testing.T) {
 }
 
 func TestInstallCode(t *testing.T) {
-	tern(t, "code", "install", "-c", "testdata/tern.conf", "testdata/code")
+	tern(t, "code", "install", "-c", testConfigPath(), "testdata/code")
 
 	conn := connectConn(t)
 	defer conn.Close(context.Background())
@@ -322,9 +329,9 @@ func TestInstallCode(t *testing.T) {
 
 func TestCLIArgsWithoutConfigFile(t *testing.T) {
 	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath(), "-d", "0")
 
-	connConfig, err := readConfig("testdata/tern.conf")
+	connConfig, err := readConfig(testConfigPath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,9 +383,9 @@ sslmode=disable
 
 func TestConfigFileTemplateEvalWithEnvVar(t *testing.T) {
 	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath(), "-d", "0")
 
-	connConfig, err := readConfig("testdata/tern.conf")
+	connConfig, err := readConfig(testConfigPath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +438,7 @@ func TestSSHTunnel(t *testing.T) {
 	}
 
 	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath(), "-d", "0")
 
 	output := tern(t, "status",
 		"-m", "testdata",
@@ -450,7 +457,7 @@ version:  0 of 2`
 
 func TestConnStringCLIArg(t *testing.T) {
 	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath(), "-d", "0")
 	connString := os.Getenv("TERN_TEST_CONN_STRING")
 
 	output := tern(t, "status",
@@ -466,7 +473,7 @@ version:  0 of 2`
 
 func TestConnStringFromConfFile(t *testing.T) {
 	// Ensure database is in clean state
-	tern(t, "migrate", "-m", "testdata", "-c", "testdata/tern.conf", "-d", "0")
+	tern(t, "migrate", "-m", "testdata", "-c", testConfigPath(), "-d", "0")
 
 	output := tern(t, "status", "-m", "testdata", "-c", "testdata/tern-conn-string.conf")
 	expected := `status:   migration(s) pending
@@ -510,7 +517,7 @@ func TestRenumber(t *testing.T) {
 }
 
 func TestGengen(t *testing.T) {
-	gengenSQL := tern(t, "gengen", "-m", "testdata", "-c", "testdata/tern.conf")
+	gengenSQL := tern(t, "gengen", "-m", "testdata", "-c", testConfigPath())
 
 	ctx := context.Background()
 	conn := connectConn(t)

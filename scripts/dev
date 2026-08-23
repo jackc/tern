@@ -1,0 +1,335 @@
+#!/bin/bash
+set -e
+
+script_dir="$(cd "$(dirname "$0")" && pwd -P)"
+repo_root="$(cd "$script_dir/.." && pwd -P)"
+
+fail() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "$1 is required; run 'brew bundle' on macOS or install PostgreSQL 18"
+}
+
+require_postgres_18() {
+  require_command postgres
+  postgres_version="$(postgres --version)"
+  case "$postgres_version" in
+    *"PostgreSQL) 18."*) ;;
+    *) fail "PostgreSQL 18 is required, but found: $postgres_version" ;;
+  esac
+  require_command initdb
+  require_command pg_ctl
+  require_command pg_isready
+  require_command psql
+  require_command createdb
+  require_command dropdb
+}
+
+run_process_compose() {
+  XDG_CONFIG_HOME="$TERN_PC_CONFIG_HOME" command process-compose "$@"
+}
+
+validate_paths() {
+  [ -n "${TERN_DEV_STATE_DIR:-}" ] || fail "TERN_DEV_STATE_DIR is not set; run this command through mise"
+  [ -n "${PGDATA:-}" ] || fail "PGDATA is not set; run this command through mise"
+  [ "$TERN_DEV_STATE_DIR" != "/" ] || fail "refusing to use / as the development state directory"
+  [ "$PGDATA" = "$TERN_DEV_STATE_DIR/postgres/data" ] || fail "PGDATA is outside the development state directory"
+}
+
+cluster_running() {
+  [ -f "$PGDATA/PG_VERSION" ] && pg_ctl -D "$PGDATA" status >/dev/null 2>&1
+}
+
+cluster_port() {
+  if [ -r "$PGDATA/postmaster.pid" ]; then
+    sed -n '4p' "$PGDATA/postmaster.pid"
+  fi
+}
+
+port_in_use() {
+  port_to_check="$1"
+  if command -v nc >/dev/null 2>&1; then
+    nc -z 127.0.0.1 "$port_to_check" >/dev/null 2>&1
+  else
+    pg_isready -q -h 127.0.0.1 -p "$port_to_check" -t 1 >/dev/null 2>&1
+  fi
+}
+
+choose_port() {
+  attempts=0
+  while [ "$attempts" -lt 200 ]; do
+    candidate=$((10000 + RANDOM % 20000))
+    if ! port_in_use "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    attempts=$((attempts + 1))
+  done
+  fail "could not find a free PostgreSQL port between 10000 and 29999"
+}
+
+write_atomic() {
+  destination="$1"
+  temporary="$destination.tmp.$$"
+  umask 077
+  sed_expression="$2"
+  printf '%s' "$sed_expression" >"$temporary"
+  mv "$temporary" "$destination"
+}
+
+write_test_config() {
+  config_contents="[database]
+host = 127.0.0.1
+port = $selected_port
+database = tern_test
+user = postgres
+sslmode = disable
+
+[data]
+"
+  write_atomic "$TERN_TEST_CONFIG" "$config_contents"
+}
+
+initialize_state() {
+  validate_paths
+  require_postgres_18
+  command -v go >/dev/null 2>&1 || fail "Go is required; run 'mise install'"
+  command -v process-compose >/dev/null 2>&1 || fail "Process Compose is required; run 'mise install'"
+
+  mkdir -p "$TERN_DEV_STATE_DIR" "$TERN_PG_SOCKET_DIR" "$TERN_PC_CONFIG_HOME/process-compose"
+
+  process_compose_version="$(run_process_compose version 2>/dev/null || true)"
+  case "$process_compose_version" in
+    *"1.122.0"*) ;;
+    *) fail "Process Compose 1.122.0 is required; run 'mise install'" ;;
+  esac
+
+  saved_port=""
+  if [ -r "$TERN_DEV_STATE_DIR/port" ]; then
+    saved_port="$(sed -n '1p' "$TERN_DEV_STATE_DIR/port")"
+    case "$saved_port" in
+      ''|*[!0-9]*) saved_port="" ;;
+      *)
+        if [ "$saved_port" -lt 10000 ] || [ "$saved_port" -gt 29999 ]; then
+          saved_port=""
+        fi
+        ;;
+    esac
+  fi
+
+  selected_port="$saved_port"
+  if [ -n "$selected_port" ] && port_in_use "$selected_port"; then
+    if ! cluster_running || [ "$(cluster_port)" != "$selected_port" ]; then
+      selected_port=""
+    fi
+  fi
+  if [ -z "$selected_port" ]; then
+    selected_port="$(choose_port)"
+  fi
+
+  write_atomic "$TERN_DEV_STATE_DIR/port" "$selected_port
+"
+
+  if [ -f "$PGDATA/PG_VERSION" ]; then
+    cluster_major="$(sed -n '1p' "$PGDATA/PG_VERSION")"
+    [ "$cluster_major" = "18" ] || fail "cluster at $PGDATA was created by PostgreSQL $cluster_major; remove or upgrade it explicitly"
+  else
+    [ ! -e "$PGDATA" ] || [ -z "$(ls -A "$PGDATA" 2>/dev/null)" ] || fail "$PGDATA exists but is not a PostgreSQL cluster"
+    mkdir -p "$PGDATA"
+    initdb --pgdata="$PGDATA" --locale=C --encoding=UTF8 --username=postgres
+  fi
+
+  write_test_config
+}
+
+environment_matches_state() {
+  [ -n "${PGPORT:-}" ] && [ "$PGPORT" = "$(sed -n '1p' "$TERN_DEV_STATE_DIR/port")" ]
+}
+
+reenter_with_mise() {
+  internal_command="$1"
+  shift
+  command -v mise >/dev/null 2>&1 || fail "mise is required to refresh the development environment"
+  exec mise exec -- "$script_dir/dev" "$internal_command" "$@"
+}
+
+process_compose_responding() {
+  [ -S "$PC_SOCKET_PATH" ] || return 1
+  run_process_compose -U -u "$PC_SOCKET_PATH" process list >/dev/null 2>&1
+}
+
+remove_stale_control_socket() {
+  [ -e "$PC_SOCKET_PATH" ] || return 0
+  if process_compose_responding; then
+    return 0
+  fi
+  cluster_running && fail "PostgreSQL is running without a responsive Process Compose server; inspect it with 'mise run db:status'"
+  rm -f "$PC_SOCKET_PATH"
+}
+
+run_dev() {
+  process_compose_responding && fail "this worktree's foreground PostgreSQL session is already running"
+  cluster_running && fail "PostgreSQL is already running outside this worktree's Process Compose session"
+  remove_stale_control_socket
+
+  tui_flag="--tui"
+  if [ ! -t 0 ] || [ ! -t 1 ] || [ -n "${CI:-}" ]; then
+    tui_flag="--tui=false"
+  fi
+
+  XDG_CONFIG_HOME="$TERN_PC_CONFIG_HOME" exec process-compose up postgres \
+    --disable-dotenv \
+    --use-uds \
+    --unix-socket "$PC_SOCKET_PATH" \
+    --log-file "$PC_LOG_FILE" \
+    "$tui_flag"
+}
+
+test_database_exists() {
+  database_name="$1"
+  [ "$(psql \
+    --no-psqlrc \
+    --quiet \
+    --tuples-only \
+    --no-align \
+    --set=ON_ERROR_STOP=1 \
+    --dbname=postgres \
+    --command="select 1 from pg_database where datname = '$database_name'")" = "1" ]
+}
+
+ensure_test_database() {
+  database_name="$1"
+  if ! test_database_exists "$database_name"; then
+    if ! createdb --maintenance-db=postgres "$database_name"; then
+      test_database_exists "$database_name" || return 1
+    fi
+    echo "created database $database_name"
+  fi
+}
+
+run_tests() {
+  process_compose_responding || fail "PostgreSQL is not running; start it with 'mise run dev' in another terminal"
+  cluster_running || fail "the Process Compose project is active, but its PostgreSQL process is not running"
+  pg_isready -q -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres || fail "PostgreSQL is not ready"
+
+  ensure_test_database "$TERN_TEST_DATABASE"
+  ensure_test_database "$MIGRATE_TEST_DATABASE"
+  go test ./... "$@"
+}
+
+show_status() {
+  if [ ! -f "$PGDATA/PG_VERSION" ] || [ ! -r "$TERN_DEV_STATE_DIR/port" ]; then
+    echo "Process Compose: stopped"
+    echo "PostgreSQL:      not initialized"
+    echo "Address:         not assigned"
+    return 0
+  fi
+
+  pc_status="stopped"
+  postgres_status="stopped"
+  if process_compose_responding; then
+    pc_status="running"
+  elif [ -e "$PC_SOCKET_PATH" ]; then
+    pc_status="stale socket"
+  fi
+  if cluster_running; then
+    postgres_status="running"
+  fi
+
+  echo "Process Compose: $pc_status"
+  echo "PostgreSQL:      $postgres_status"
+  echo "Address:         $PGHOST:$PGPORT"
+
+  if [ "$postgres_status" = "running" ] && [ "$pc_status" != "running" ]; then
+    return 1
+  fi
+}
+
+show_info() {
+  info_port="${PGPORT:-not assigned}"
+  echo "Worktree:              $(basename "$repo_root")"
+  echo "State directory:       $TERN_DEV_STATE_DIR"
+  echo "PostgreSQL data:       $PGDATA"
+  echo "PostgreSQL address:    $PGHOST:$info_port"
+  echo "PostgreSQL socket:     $TERN_PG_SOCKET_DIR"
+  echo "Test database:         $TERN_TEST_DATABASE"
+  echo "Migrate test database: $MIGRATE_TEST_DATABASE"
+  echo "Test config:           $TERN_TEST_CONFIG"
+  echo "Process Compose socket: $PC_SOCKET_PATH"
+  echo "Process Compose log:   $PC_LOG_FILE"
+  echo
+  show_status
+  echo
+  echo "Start PostgreSQL: mise run dev"
+  echo "Run tests:        mise run test"
+  echo "Open psql:        mise exec -- psql"
+}
+
+reset_database() {
+  process_compose_responding && fail "stop 'mise run dev' before resetting the database"
+  cluster_running && fail "PostgreSQL is running; stop it before resetting the database"
+  validate_paths
+  rm -rf "$PGDATA"
+  initialize_state
+  echo "reset PostgreSQL cluster at $PGDATA"
+}
+
+command_name="${1:-}"
+if [ -n "$command_name" ]; then
+  shift
+fi
+
+case "$command_name" in
+  init)
+    initialize_state
+    echo "initialized PostgreSQL cluster at $PGDATA"
+    ;;
+  dev)
+    initialize_state
+    if environment_matches_state; then
+      run_dev
+    else
+      reenter_with_mise _dev "$@"
+    fi
+    ;;
+  _dev)
+    validate_paths
+    require_postgres_18
+    run_dev
+    ;;
+  test)
+    validate_paths
+    require_postgres_18
+    command -v process-compose >/dev/null 2>&1 || fail "Process Compose is required; run 'mise install'"
+    run_tests "$@"
+    ;;
+  status)
+    validate_paths
+    require_postgres_18
+    command -v process-compose >/dev/null 2>&1 || fail "Process Compose is required; run 'mise install'"
+    show_status
+    ;;
+  info)
+    validate_paths
+    require_postgres_18
+    command -v process-compose >/dev/null 2>&1 || fail "Process Compose is required; run 'mise install'"
+    show_info
+    ;;
+  reset)
+    initialize_state
+    if environment_matches_state; then
+      reset_database
+    else
+      reenter_with_mise _reset
+    fi
+    ;;
+  _reset)
+    reset_database
+    ;;
+  *)
+    fail "usage: scripts/dev {init|dev|test|status|info|reset}"
+    ;;
+esac
