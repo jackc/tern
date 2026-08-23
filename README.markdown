@@ -537,6 +537,13 @@ is still available through RubyGems and the source code is on the ruby branch.
 
 ## Version History
 
+## 2.4.3 (August 22, 2026)
+
+* Fix version reported by `tern version` (was stale since 2.4.0)
+* Add macOS builds to goreleaser config
+* Add native macOS development environment
+* Upgrade dependencies
+
 ## 2.4.2 (August 1, 2026)
 
 * Fix connection setting precedence
