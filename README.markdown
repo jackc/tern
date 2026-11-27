@@ -17,6 +17,8 @@ workflow for managing database code such as functions and views.
 go install github.com/jackc/tern/v2@latest
 ```
 
+To use Tern from a Go application, see the [migrate package example](migrate/README.md).
+
 ## Creating a Tern Project
 
 To create a new tern project in the current directory run:
